@@ -45,6 +45,7 @@ import {
   createMember,
   updateMember,
   deleteMember,
+  cleanupDuplicateMembers,
   getMemberApplications,
   approveMemberApplication,
   updateMemberApplicationStatus,
@@ -111,6 +112,7 @@ export const AdminMembers: React.FC = () => {
   const [viewingMember, setViewingMember] = useState<Profile | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   // Active Member Form state
@@ -247,11 +249,48 @@ export const AdminMembers: React.FC = () => {
 
   const handleDeleteMember = async (id: string) => {
     try {
+      setSaving(true);
       await deleteMember(id);
       setDeleteConfirmId(null);
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+      setTotal((prev) => Math.max(0, prev - 1));
       await loadData();
     } catch (err: any) {
       alert("Error deleting member: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCleanDuplicates = async () => {
+    const isConfirmed = window.confirm(
+      "Are you sure you want to clean up duplicate and test user accounts (Abiya Daniel & duplicate handles)?"
+    );
+    if (!isConfirmed) return;
+
+    try {
+      setCleaningDuplicates(true);
+      await cleanupDuplicateMembers();
+      // Instantly filter out test / duplicate emails from state
+      setMembers((prev) =>
+        prev.filter((m) => {
+          const lowerEmail = (m.email || "").toLowerCase();
+          const lowerName = (m.full_name || "").toLowerCase();
+          return (
+            lowerEmail !== "abiya@fossceprn.com" &&
+            lowerEmail !== "hackceprn@gmail.com" &&
+            lowerEmail !== "amal@fossceprn" &&
+            lowerEmail !== "amaldev@fossceprn" &&
+            !lowerName.includes("abiya daniel")
+          );
+        })
+      );
+      await loadData();
+      alert("Cleanup completed! Removed duplicate and test member accounts.");
+    } catch (err: any) {
+      alert("Error cleaning duplicate members: " + err.message);
+    } finally {
+      setCleaningDuplicates(false);
     }
   };
 
@@ -401,6 +440,17 @@ Sign-in Portal: ${window.location.origin}/login`;
       actions={
         currentTab === "directory" ? (
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCleanDuplicates}
+              disabled={cleaningDuplicates}
+              className="h-9 gap-1.5 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200"
+              title="Delete duplicate accounts (Abiya Daniel & duplicate handles)"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>{cleaningDuplicates ? "Cleaning..." : "Clean Duplicates"}</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"

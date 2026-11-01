@@ -296,9 +296,58 @@ export async function updateMember(id: string, updates: Partial<Profile>): Promi
 }
 
 export async function deleteMember(id: string): Promise<void> {
+  if (!isSupabaseConfigured) return;
+
+  try {
+    // 1. Try server-side RPC to remove profile, roles, and auth records safely
+    const { error: rpcErr } = await supabase.rpc("delete_member_completely", {
+      p_profile_id: id,
+    });
+    if (!rpcErr) {
+      await logActivity("Deleted Member", "profile", id);
+      return;
+    }
+  } catch (e) {
+    console.warn("delete_member_completely RPC fallback to direct delete:", e);
+  }
+
+  // 2. Direct fallback delete from profiles
   const { error } = await supabase.from("profiles").delete().eq("id", id);
   if (error) throw error;
   await logActivity("Deleted Member", "profile", id);
+}
+
+export async function cleanupDuplicateMembers(): Promise<{ deleted: number }> {
+  if (!isSupabaseConfigured) return { deleted: 0 };
+
+  try {
+    const { data, error } = await supabase.rpc("cleanup_duplicate_members");
+    if (!error && data !== null && data !== undefined) {
+      await logActivity("Cleaned Duplicate Members", "profile", "system");
+      return { deleted: typeof data === "number" ? data : 1 };
+    }
+  } catch (e) {
+    console.warn("cleanup_duplicate_members RPC fallback to client query:", e);
+  }
+
+  // Fallback client-side delete
+  const targetEmails = [
+    "abiya@fossceprn.com",
+    "hackceprn@gmail.com",
+    "amal@fossceprn",
+    "amaldev@fossceprn",
+  ];
+
+  const { count, error } = await supabase
+    .from("profiles")
+    .delete({ count: "exact" })
+    .in("email", targetEmails);
+
+  if (error) {
+    console.warn("Client fallback delete notice:", error);
+  }
+
+  return { deleted: count || 0 };
 }
 
 // ----------------------------------------------------------------------------
@@ -339,25 +388,48 @@ export async function getAllExecomAdmin(): Promise<ExecomMember[]> {
 }
 
 export async function createExecomMember(member: Partial<ExecomMember>): Promise<ExecomMember> {
+  const insertPayload: any = {
+    full_name: member.full_name,
+    designation: member.designation,
+    department: member.department,
+    semester: member.semester,
+    email: member.email || null,
+    login_password: member.login_password || null,
+    photo_url: member.photo_url,
+    github_url: member.github_url,
+    linkedin_url: member.linkedin_url,
+    display_order: member.display_order ?? 0,
+    is_active: member.is_active ?? true,
+  };
+
   const { data, error } = await supabase
     .from("execom_members")
-    .insert([
-      {
-        full_name: member.full_name,
-        designation: member.designation,
-        department: member.department,
-        semester: member.semester,
-        photo_url: member.photo_url,
-        github_url: member.github_url,
-        linkedin_url: member.linkedin_url,
-        display_order: member.display_order ?? 0,
-        is_active: member.is_active ?? true,
-      },
-    ])
+    .insert([insertPayload])
     .select()
     .single();
 
   if (error) throw error;
+
+  if (data?.id && data.email && member.login_password) {
+    try {
+      await supabase.rpc("save_execom_member_credentials", {
+        p_execom_id: data.id,
+        p_email: data.email,
+        p_password: member.login_password,
+        p_role: "editor",
+      });
+      saveAssignedCredential({
+        execomId: data.id,
+        fullName: data.full_name,
+        email: data.email,
+        password: member.login_password,
+        role: "editor",
+      });
+    } catch (e) {
+      console.warn("Notice syncing credentials to auth:", e);
+    }
+  }
+
   await logActivity("Created Execom Member", "execom_member", data.id, {
     name: data.full_name,
     role: data.designation,
@@ -377,6 +449,31 @@ export async function updateExecomMember(
     .single();
 
   if (error) throw error;
+
+  const activeEmail = updates.email || data.email;
+  const activePassword = updates.login_password || data.login_password;
+
+  if (data?.id && activeEmail && activePassword) {
+    try {
+      await supabase.rpc("save_execom_member_credentials", {
+        p_execom_id: data.id,
+        p_email: activeEmail,
+        p_password: activePassword,
+        p_role: "editor",
+      });
+    } catch (e) {
+      console.warn("Notice syncing updated credentials to auth:", e);
+    }
+
+    saveAssignedCredential({
+      execomId: data.id,
+      fullName: data.full_name,
+      email: activeEmail,
+      password: activePassword,
+      role: "editor",
+    });
+  }
+
   await logActivity("Updated Execom Member", "execom_member", id, { name: data.full_name });
   return data;
 }
@@ -1122,20 +1219,48 @@ export async function provisionExecomCredentials(params: {
     };
   }
 
-  // 2. Update execom_members email if execomId is provided
+  // 2. Update execom_members email and login_password if execomId is provided
   if (params.execomId) {
     try {
       await supabase
         .from("execom_members")
-        .update({ email: cleanEmail })
+        .update({
+          email: cleanEmail,
+          login_password: params.password,
+        })
         .eq("id", params.execomId);
     } catch (e) {
-      console.warn("Could not update execom_members email:", e);
+      console.warn("Could not update execom_members email/password:", e);
     }
   }
 
-  // 3. Try PostgreSQL stored procedure if available
+  // 3. Try save_execom_member_credentials or admin_provision_execom_user
   try {
+    if (params.execomId) {
+      const { data: saveRes, error: saveErr } = await supabase.rpc(
+        "save_execom_member_credentials",
+        {
+          p_execom_id: params.execomId,
+          p_email: cleanEmail,
+          p_password: params.password,
+          p_role: params.role,
+        }
+      );
+      if (!saveErr && saveRes?.success) {
+        await logActivity(
+          `Assigned ExeCom Login: ${cleanEmail}`,
+          "execom_members",
+          params.execomId || null,
+          { email: cleanEmail, role: params.role }
+        );
+        return {
+          success: true,
+          message: `Successfully provisioned credentials for ${cleanEmail} with role '${params.role}'.`,
+          userId: saveRes.user_id,
+        };
+      }
+    }
+
     const { data: sessData } = await supabase.auth.getSession();
     if (!sessData?.session?.user) {
       await supabase.auth

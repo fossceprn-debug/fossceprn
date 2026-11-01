@@ -77,6 +77,7 @@ export interface ExecomMember {
   is_active: boolean;
   email?: string | null;
   user_id?: string | null;
+  login_password?: string | null;
   role?: AdminRole | null;
   created_at: string;
 }

@@ -150,6 +150,7 @@ export const AdminExecom: React.FC = () => {
     department: "Computer Science & Engineering",
     semester: "S7",
     email: "",
+    login_password: "",
     photo_url: "",
     github_url: "",
     linkedin_url: "",
@@ -221,6 +222,7 @@ export const AdminExecom: React.FC = () => {
       department: "Computer Science & Engineering",
       semester: "S7",
       email: "",
+      login_password: generateSecurePassword(),
       photo_url: "",
       github_url: "",
       linkedin_url: "",
@@ -233,12 +235,17 @@ export const AdminExecom: React.FC = () => {
 
   const handleOpenEdit = (member: ExecomMember) => {
     setEditingMember(member);
+    const existingCred =
+      findAssignedCredential(member.email || "") ||
+      findAssignedCredential(member.full_name);
+
     setFormData({
       full_name: member.full_name,
       designation: member.designation,
       department: member.department,
       semester: member.semester || "S7",
       email: member.email || "",
+      login_password: member.login_password || existingCred?.password || "",
       photo_url: member.photo_url || "",
       github_url: member.github_url || "",
       linkedin_url: member.linkedin_url || "",
@@ -1367,6 +1374,37 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
                     className="h-9 text-xs"
                   />
                 </div>
+              </div>
+
+              {/* Login Password */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Coordinator Login Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, login_password: generateSecurePassword() })
+                    }
+                    className="text-[11px] text-emerald-700 font-semibold hover:underline flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Generate Password
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                  <Input
+                    type="text"
+                    placeholder="Enter coordinator login password"
+                    value={formData.login_password || ""}
+                    onChange={(e) => setFormData({ ...formData, login_password: e.target.value })}
+                    className="pl-9 h-9 text-xs font-mono"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Saved directly to database. Coordinators can sign in with this password and their email or user ID.
+                </p>
               </div>
 
               {/* Photo Upload */}

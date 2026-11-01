@@ -212,7 +212,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 2. Check dynamically assigned ExeCom coordinator credentials (with immediate update support)
+    // 2. Check ExeCom Member built-in / seeded credentials
+    const isAmalAccount =
+      cleanHandle === "amal" ||
+      cleanHandle === "amaldev" ||
+      rawInput === "amaldev@fossceprn.com" ||
+      rawInput === "amal@fossceprn.com";
+
+    if (isAmalAccount && (password === "Fossamal26" || password === "foss@123")) {
+      const amalUser: AuthUser = {
+        id: "00000000-0000-0000-0000-000000000002",
+        email: "amaldev@fossceprn.com",
+        full_name: "Amal Dev A",
+        role: "editor",
+      };
+      setUser(amalUser);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(amalUser));
+      return { success: true, role: "editor" };
+    }
+
+    // 3. Check dynamically assigned ExeCom coordinator credentials (localStorage cache)
     const assignedCheck = verifyAssignedCredential(rawInput, password);
     if (assignedCheck.matchedUser) {
       if (assignedCheck.passwordValid && assignedCheck.credential) {
@@ -236,8 +255,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 3. If Supabase is configured, attempt live authentication for other registered accounts
+    // 4. If Supabase is configured, check database-persisted ExeCom credentials & live auth
     if (isSupabaseConfigured) {
+      // 4a. Check database-persisted ExeCom coordinator login via verify_execom_login RPC
+      try {
+        const { data: vData } = await supabase.rpc("verify_execom_login", {
+          p_identifier: rawInput,
+          p_password: password,
+        });
+
+        if (vData?.success && vData.member) {
+          const loggedUser: AuthUser = {
+            id: vData.member.id,
+            email: vData.member.email,
+            full_name: vData.member.full_name,
+            role: (vData.member.role as AdminRole) || "editor",
+          };
+          setUser(loggedUser);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
+
+          supabase.auth.signInWithPassword({
+            email: vData.member.email,
+            password,
+          }).catch(() => {});
+
+          return { success: true, role: loggedUser.role };
+        } else if (vData?.error && vData.error.includes("Invalid password")) {
+          return { success: false, error: vData.error };
+        }
+      } catch (rpcErr) {
+        console.warn("verify_execom_login RPC fallback:", rpcErr);
+      }
+
+      // 4b. Direct table check on execom_members (login_password column)
+      try {
+        const { data: exMember } = await supabase
+          .from("execom_members")
+          .select("id, full_name, email, designation, login_password, user_id")
+          .or(`email.ilike.${rawInput},email.ilike.${normalizedEmail},email.ilike.${cleanHandle}@fossceprn.com,full_name.ilike.%${cleanHandle}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (exMember && exMember.login_password) {
+          if (exMember.login_password === password) {
+            const loggedUser: AuthUser = {
+              id: exMember.user_id || exMember.id,
+              email: exMember.email || rawInput,
+              full_name: exMember.full_name || "ExeCom Coordinator",
+              role: "editor",
+            };
+            setUser(loggedUser);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
+
+            supabase.auth.signInWithPassword({
+              email: loggedUser.email,
+              password,
+            }).catch(() => {});
+
+            return { success: true, role: "editor" };
+          } else {
+            return {
+              success: false,
+              error: "Invalid password for this coordinator account. Please verify your credentials.",
+            };
+          }
+        }
+      } catch (dbErr) {
+        console.warn("Notice checking execom_members table during login:", dbErr);
+      }
+
       try {
         let authResult = await supabase.auth.signInWithPassword({
           email: normalizedEmail,
@@ -268,44 +354,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(loggedUser);
           localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
           return { success: true, role: userRole };
-        }
-
-        // Check if user is an ExeCom coordinator in database
-        try {
-          const { data: exMember } = await supabase
-            .from("execom_members")
-            .select("id, full_name, email, designation")
-            .or(`email.ilike.${rawInput},email.ilike.${normalizedEmail},full_name.ilike.%${cleanHandle}%`)
-            .limit(1)
-            .maybeSingle();
-
-          if (exMember) {
-            const assigned =
-              findAssignedCredential(rawInput) ||
-              findAssignedCredential(exMember.email || "") ||
-              findAssignedCredential(exMember.full_name || "");
-            if (assigned) {
-              if (assigned.password === password) {
-                const userRole: AdminRole = assigned.role || "editor";
-                const loggedUser: AuthUser = {
-                  id: exMember.id,
-                  email: exMember.email || rawInput,
-                  full_name: exMember.full_name || "ExeCom Coordinator",
-                  role: userRole,
-                };
-                setUser(loggedUser);
-                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
-                return { success: true, role: userRole };
-              } else {
-                return {
-                  success: false,
-                  error: "Invalid password for this coordinator account. Please verify your credentials.",
-                };
-              }
-            }
-          }
-        } catch (dbErr) {
-          console.warn("Notice checking execom_members table during login:", dbErr);
         }
 
         // Sanitize error message so raw database / GoTrue schema crashes are never exposed to users
