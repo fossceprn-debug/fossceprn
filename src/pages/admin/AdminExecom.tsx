@@ -32,6 +32,7 @@ import {
   ShieldAlert,
   Lock,
   RefreshCw,
+  Phone,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -144,13 +145,29 @@ export const AdminExecom: React.FC = () => {
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   // Active member Form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    full_name: string;
+    designation: string;
+    department: string;
+    semester: string;
+    phone_number: string;
+    email: string;
+    login_password: string;
+    role: AdminRole;
+    photo_url: string;
+    github_url: string;
+    linkedin_url: string;
+    display_order: number;
+    is_active: boolean;
+  }>({
     full_name: "",
     designation: "",
     department: "Computer Science & Engineering",
     semester: "S7",
+    phone_number: "",
     email: "",
     login_password: "",
+    role: "editor",
     photo_url: "",
     github_url: "",
     linkedin_url: "",
@@ -214,6 +231,27 @@ export const AdminExecom: React.FC = () => {
   // --------------------------------------------------------------------------
   // ACTIVE MEMBERS LOGIC
   // --------------------------------------------------------------------------
+  const handleOpenCreateFaculty = () => {
+    setEditingMember(null);
+    setFormData({
+      full_name: "",
+      designation: "Faculty Coordinator",
+      department: "Computer Science & Engineering",
+      semester: "Faculty",
+      phone_number: "",
+      email: "",
+      login_password: generateSecurePassword(),
+      role: "faculty",
+      photo_url: "",
+      github_url: "",
+      linkedin_url: "",
+      display_order: 1,
+      is_active: true,
+    });
+    setErrorMsg("");
+    setModalOpen(true);
+  };
+
   const handleOpenCreate = () => {
     setEditingMember(null);
     setFormData({
@@ -221,8 +259,10 @@ export const AdminExecom: React.FC = () => {
       designation: "",
       department: "Computer Science & Engineering",
       semester: "S7",
+      phone_number: "",
       email: "",
       login_password: generateSecurePassword(),
+      role: "editor",
       photo_url: "",
       github_url: "",
       linkedin_url: "",
@@ -239,13 +279,20 @@ export const AdminExecom: React.FC = () => {
       findAssignedCredential(member.email || "") ||
       findAssignedCredential(member.full_name);
 
+    const isFacultyMember =
+      member.role === "faculty" ||
+      member.designation?.toLowerCase().includes("faculty") ||
+      member.designation?.toLowerCase().includes("staff advisor");
+
     setFormData({
       full_name: member.full_name,
       designation: member.designation,
       department: member.department,
-      semester: member.semester || "S7",
+      semester: member.semester || (isFacultyMember ? "Faculty" : "S7"),
+      phone_number: member.phone_number || "",
       email: member.email || "",
       login_password: member.login_password || existingCred?.password || "",
+      role: member.role || (isFacultyMember ? "faculty" : "editor"),
       photo_url: member.photo_url || "",
       github_url: member.github_url || "",
       linkedin_url: member.linkedin_url || "",
@@ -563,14 +610,25 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
           </div>
 
           {currentTab === "active" ? (
-            <Button
-              size="sm"
-              onClick={handleOpenCreate}
-              className="h-9 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add ExeCom Member</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleOpenCreateFaculty}
+                className="h-9 gap-1.5 text-xs font-bold border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-xs"
+              >
+                <GraduationCap className="w-4 h-4 text-indigo-600" />
+                <span>Add Faculty Coordinator</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleOpenCreate}
+                className="h-9 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add ExeCom Member</span>
+              </Button>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 font-medium hidden sm:inline">
@@ -713,9 +771,25 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="font-semibold text-slate-900">{member.full_name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-semibold text-slate-900">{member.full_name}</p>
+                                {(member.role === "faculty" ||
+                                  member.designation?.toLowerCase().includes("faculty") ||
+                                  member.designation?.toLowerCase().includes("staff advisor")) && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    <GraduationCap className="w-3 h-3 text-indigo-600" />
+                                    Faculty
+                                  </span>
+                                )}
+                              </div>
                               {member.email && (
                                 <p className="text-[11px] text-slate-500 font-mono">{member.email}</p>
+                              )}
+                              {member.phone_number && (
+                                <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                  <Phone className="w-3 h-3 text-slate-400" />
+                                  <span>{member.phone_number}</span>
+                                </p>
                               )}
                               <div className="flex items-center gap-2 text-slate-400 mt-0.5">
                                 {member.github_url && (
@@ -1237,11 +1311,14 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
                       <option value="editor">
                         Editor (Can manage Events, Projects, Gallery, and Announcements)
                       </option>
+                      <option value="faculty">
+                        Faculty Coordinator / Staff Advisor (Teachers Console & Activity Calendar)
+                      </option>
                       <option value="admin">
                         Admin (Full content control + Member management)
                       </option>
-                      <option value="lead">
-                        Chapter Lead (Executive content & coordinator privileges)
+                      <option value="super_admin">
+                        Super Admin (Full system-wide administrative control)
                       </option>
                     </select>
                   </div>
@@ -1284,11 +1361,20 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
           <DialogContent className="max-w-lg p-6 bg-white rounded-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-slate-900">
-                {editingMember ? "Edit ExeCom Member" : "Add New ExeCom Member"}
+              <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                {formData.role === "faculty" && <GraduationCap className="w-5 h-5 text-indigo-600" />}
+                {editingMember
+                  ? formData.role === "faculty"
+                    ? "Edit Faculty Coordinator"
+                    : "Edit ExeCom Member"
+                  : formData.role === "faculty"
+                  ? "Register Faculty Coordinator"
+                  : "Add New ExeCom Member"}
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Configure student executive leadership member details and official role.
+                {formData.role === "faculty"
+                  ? "Configure faculty coordinator / staff advisor profile, contact details, and console access."
+                  : "Configure student executive leadership member details and official role."}
               </DialogDescription>
             </DialogHeader>
 
@@ -1300,13 +1386,41 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
             )}
 
             <form onSubmit={handleSaveMember} className="space-y-4 pt-2">
+              {/* Role Selection */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Access Level / Role *
+                </label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => {
+                    const nextRole = e.target.value as AdminRole;
+                    setFormData((prev) => ({
+                      ...prev,
+                      role: nextRole,
+                      designation:
+                        nextRole === "faculty" && (!prev.designation || prev.designation === "Chapter Lead")
+                          ? "Faculty Coordinator"
+                          : prev.designation,
+                      semester: nextRole === "faculty" ? "Faculty" : prev.semester === "Faculty" ? "S7" : prev.semester,
+                    }));
+                  }}
+                  className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 font-semibold"
+                >
+                  <option value="editor">ExeCom Coordinator (editor) — Content management</option>
+                  <option value="faculty">Faculty Coordinator (faculty) — Teachers Console & Calendar</option>
+                  <option value="admin">Administrator (admin) — Full member & content management</option>
+                  <option value="super_admin">Super Administrator (super_admin) — System wide authority</option>
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                   Full Name *
                 </label>
                 <Input
                   required
-                  placeholder="e.g. Rahul Sharma"
+                  placeholder={formData.role === "faculty" ? "e.g. Dr. Priya Thomas" : "e.g. Rahul Sharma"}
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                   className="h-9 text-xs"
@@ -1320,7 +1434,7 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
                   </label>
                   <Input
                     required
-                    placeholder="e.g. Chapter Lead"
+                    placeholder={formData.role === "faculty" ? "e.g. Faculty Coordinator" : "e.g. Chapter Lead"}
                     value={formData.designation}
                     onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
                     className="h-9 text-xs"
@@ -1329,26 +1443,34 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Semester
+                    {formData.role === "faculty" ? "Academic Standing" : "Semester"}
                   </label>
-                  <select
-                    value={formData.semester}
-                    onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
-                    className="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800"
-                  >
-                    {SEMESTERS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
+                  {formData.role === "faculty" ? (
+                    <Input
+                      disabled
+                      value="Faculty Advisor / Staff"
+                      className="h-9 text-xs bg-slate-100 text-slate-500 font-medium"
+                    />
+                  ) : (
+                    <select
+                      value={formData.semester}
+                      onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
+                      className="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800"
+                    >
+                      {SEMESTERS.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Department
+                    Department *
                   </label>
                   <select
                     value={formData.department}
@@ -1365,14 +1487,34 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Coordinator Email
+                    Phone Number
                   </label>
+                  <div className="relative">
+                    <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                    <Input
+                      type="tel"
+                      placeholder="+91 98765 43210"
+                      value={formData.phone_number}
+                      onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                      className="pl-8 h-9 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Gmail ID / Official Email *
+                </label>
+                <div className="relative">
+                  <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
                   <Input
                     type="email"
-                    placeholder="coordinator@perumonec.ac.in"
+                    required
+                    placeholder="coordinator@gmail.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="h-9 text-xs"
+                    className="pl-8 h-9 text-xs"
                   />
                 </div>
               </div>
@@ -1381,7 +1523,7 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Coordinator Login Password
+                    Login Password *
                   </label>
                   <button
                     type="button"
@@ -1397,6 +1539,7 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
                   <Input
                     type="text"
+                    required
                     placeholder="Enter coordinator login password"
                     value={formData.login_password || ""}
                     onChange={(e) => setFormData({ ...formData, login_password: e.target.value })}

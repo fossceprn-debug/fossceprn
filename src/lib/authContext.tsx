@@ -13,6 +13,7 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isAdmin: boolean;
   isEditor: boolean;
+  isFaculty: boolean;
   isViewer: boolean;
   canManageUsers: boolean;
   canEditContent: boolean;
@@ -38,6 +39,7 @@ function normalizeRole(dbRole: string | null | undefined, email: string): AdminR
     return email === DEFAULT_ADMIN_EMAIL ? "super_admin" : "admin";
   }
   if (dbRole === "editor") return "editor";
+  if (dbRole === "faculty") return "faculty";
   if (dbRole === "viewer") return "viewer";
   if (email === DEFAULT_ADMIN_EMAIL) return "super_admin";
   return "member";
@@ -65,18 +67,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return email === DEFAULT_ADMIN_EMAIL ? "super_admin" : "admin";
         }
         if (roles.includes("editor")) return "editor";
+        if (roles.includes("faculty")) return "faculty";
         if (roles.includes("viewer")) return "viewer";
       }
 
       // Check if user is registered in execom_members by user_id or email
       const { data: execomMatch } = await supabase
         .from("execom_members")
-        .select("id, designation")
+        .select("id, designation, role")
         .or(`user_id.eq.${userId},email.ilike.${email}`)
         .limit(1)
         .maybeSingle();
 
       if (execomMatch) {
+        if (
+          (execomMatch as any).role === "faculty" ||
+          (execomMatch.designation && execomMatch.designation.toLowerCase().includes("faculty")) ||
+          (execomMatch.designation && execomMatch.designation.toLowerCase().includes("staff advisor"))
+        ) {
+          return "faculty";
+        }
         return "editor";
       }
     } catch (err) {
@@ -422,7 +432,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isSuperAdmin = currentRole === "super_admin";
   const isAdmin = currentRole === "super_admin" || currentRole === "admin";
   const isEditor = isSuperAdmin || isAdmin || currentRole === "editor";
-  const isViewer = isEditor || currentRole === "viewer";
+  const isFaculty = currentRole === "faculty";
+  const isViewer = isEditor || isFaculty || currentRole === "viewer";
   const canManageUsers = isSuperAdmin;
   const canEditContent = isEditor;
 
@@ -434,6 +445,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSuperAdmin,
         isAdmin,
         isEditor,
+        isFaculty,
         isViewer,
         canManageUsers,
         canEditContent,

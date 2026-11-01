@@ -1,6 +1,6 @@
 export type PublicationStatus = "draft" | "published" | "archived";
 export type RegistrationStatus = "upcoming" | "open" | "closing_soon" | "closed" | "ended";
-export type AdminRole = "super_admin" | "admin" | "editor" | "viewer";
+export type AdminRole = "super_admin" | "admin" | "editor" | "viewer" | "faculty";
 export type MembershipStatus = "active" | "inactive" | "pending";
 
 export interface Profile {
@@ -70,6 +70,7 @@ export interface ExecomMember {
   designation: string;
   department: string;
   semester?: string | null;
+  phone_number?: string | null;
   photo_url: string | null;
   github_url: string | null;
   linkedin_url: string | null;
@@ -80,6 +81,34 @@ export interface ExecomMember {
   login_password?: string | null;
   role?: AdminRole | null;
   created_at: string;
+}
+
+export type ActivityCategory =
+  | "Workshop"
+  | "Hackathon"
+  | "Meeting"
+  | "Coding Session"
+  | "Technical Talk"
+  | "Community Event"
+  | "Announcement"
+  | "Other";
+
+export type ActivityStatus = "draft" | "published" | "completed" | "archived";
+
+export interface ActivityItem {
+  id: string;
+  title: string;
+  description: string;
+  activity_date: string; // YYYY-MM-DD
+  start_time: string;    // e.g. "10:00 AM" or "14:30"
+  end_time?: string | null;
+  venue: string;
+  category: ActivityCategory;
+  status: ActivityStatus;
+  created_by: string;
+  created_by_id?: string | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 export type ExecomApplicationStatus = "pending" | "reviewed" | "accepted" | "rejected";

@@ -42,6 +42,11 @@ const ROLE_DEFINITIONS: Record<
     description: "Operational editing: create and modify events, projects, and announcements. Cannot change roles or settings.",
     badgeClass: "bg-amber-100 text-amber-800 border-amber-200",
   },
+  faculty: {
+    label: "Faculty Coordinator",
+    description: "Academic advisor access: oversight of community activities, events, and teachers console.",
+    badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  },
   viewer: {
     label: "Viewer",
     description: "Read-only access: review analytics, member registrations, and submissions.",

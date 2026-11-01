@@ -5,6 +5,7 @@ import {
   Users,
   UserCheck,
   Calendar,
+  CalendarDays,
   FolderGit2,
   Image,
   Megaphone,
@@ -42,6 +43,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
   const navLinks = [
     { name: "Overview", href: "/admin", icon: LayoutDashboard },
+    { name: "Activity Calendar", href: "/admin/calendar", icon: CalendarDays },
     { name: "Members", href: "/admin/members", icon: Users },
     { name: "ExeCom", href: "/admin/execom", icon: UserCheck },
     { name: "Events", href: "/admin/events", icon: Calendar },

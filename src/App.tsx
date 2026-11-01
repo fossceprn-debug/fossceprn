@@ -13,15 +13,19 @@ import Execom from "@/pages/Execom";
 import Gallery from "@/pages/Gallery";
 import Join from "@/pages/Join";
 import Login from "@/pages/Login";
+// Dedicated ExeCom Coordinator & Faculty Portals
 import ExecomLogin from "@/pages/ExecomLogin";
 import ExecomDashboard from "@/pages/execom/ExecomDashboard";
 import { ExecomProtectedRoute } from "@/components/execom/ExecomProtectedRoute";
+import { FacultyDashboard } from "@/pages/faculty/FacultyDashboard";
+import { FacultyProtectedRoute } from "@/components/faculty/FacultyProtectedRoute";
 import NotFound from "@/pages/NotFound";
 
 // Admin Pages & Protected Route Gate
 import { AdminProtectedRoute } from "@/components/admin/AdminProtectedRoute";
 import AdminLogin from "@/pages/admin/AdminLogin";
 import AdminOverview from "@/pages/admin/AdminOverview";
+import { AdminCalendar } from "@/pages/admin/AdminCalendar";
 import AdminMembers from "@/pages/admin/AdminMembers";
 import AdminExecom from "@/pages/admin/AdminExecom";
 import AdminEvents from "@/pages/admin/AdminEvents";
@@ -69,9 +73,10 @@ export function App() {
             <Route path="/join" element={<Join />} />
             <Route path="/login" element={<Login />} />
 
-            {/* Admin & ExeCom Authentication */}
+            {/* Admin, ExeCom & Faculty Authentication */}
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/execom/login" element={<ExecomLogin />} />
+            <Route path="/faculty/login" element={<Login />} />
 
             {/* Dedicated ExeCom Coordinator Dashboard */}
             <Route
@@ -83,12 +88,38 @@ export function App() {
               }
             />
 
+            {/* Dedicated Faculty Coordinator & Staff Advisor Console */}
+            <Route
+              path="/faculty/dashboard"
+              element={
+                <FacultyProtectedRoute>
+                  <FacultyDashboard />
+                </FacultyProtectedRoute>
+              }
+            />
+            <Route
+              path="/faculty"
+              element={
+                <FacultyProtectedRoute>
+                  <FacultyDashboard />
+                </FacultyProtectedRoute>
+              }
+            />
+
             {/* Protected Admin Routes */}
             <Route
               path="/admin"
               element={
                 <AdminProtectedRoute>
                   <AdminOverview />
+                </AdminProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/calendar"
+              element={
+                <AdminProtectedRoute>
+                  <AdminCalendar />
                 </AdminProtectedRoute>
               }
             />

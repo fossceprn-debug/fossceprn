@@ -19,7 +19,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { useAuth } from "@/lib/authContext";
 
 export const Login: React.FC = () => {
-  const { user, login, logout, isAdmin, isSuperAdmin, isEditor, isViewer } = useAuth();
+  const { user, login, logout, isAdmin, isSuperAdmin, isEditor, isFaculty, isViewer } = useAuth();
   const [emailOrId, setEmailOrId] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,7 +28,7 @@ export const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isPrivileged = Boolean(user && (isAdmin || isSuperAdmin || isEditor || isViewer));
+  const isPrivileged = Boolean(user && (isAdmin || isSuperAdmin || isEditor || isFaculty || isViewer));
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,10 +39,18 @@ export const Login: React.FC = () => {
     try {
       const res = await login(emailOrId, password);
       if (res.success) {
+        const isFacultyUser = res.role === "faculty";
         const isExecomUser = res.role === "editor";
-        const target = location.state?.from?.pathname || (isExecomUser ? "/execom/dashboard" : "/admin");
+        let target = location.state?.from?.pathname;
+        if (!target) {
+          if (isFacultyUser) target = "/faculty/dashboard";
+          else if (isExecomUser) target = "/execom/dashboard";
+          else target = "/admin";
+        }
         setSuccessMsg(
-          isExecomUser
+          isFacultyUser
+            ? "Signed in successfully! Opening Faculty Console..."
+            : isExecomUser
             ? "Signed in successfully! Opening ExeCom Dashboard..."
             : "Signed in successfully! Opening Admin Console..."
         );
@@ -62,6 +70,7 @@ export const Login: React.FC = () => {
   const getRoleBadgeLabel = () => {
     if (isSuperAdmin) return "Super Admin";
     if (isAdmin) return "Admin";
+    if (isFaculty) return "Faculty Coordinator";
     if (isEditor) return "ExeCom Coordinator";
     return "Member";
   };

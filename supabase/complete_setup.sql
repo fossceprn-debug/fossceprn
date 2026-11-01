@@ -1194,6 +1194,122 @@ GRANT EXECUTE ON FUNCTION public.admin_approve_member_application TO authenticat
 
 -- ============================================================================
 -- ============================================================================
+-- ACTIVITY CALENDAR & FACULTY COORDINATOR SUPPORT (20261101000015)
+-- ============================================================================
+
+-- 1. Add phone_number column to execom_members
+ALTER TABLE public.execom_members 
+  ADD COLUMN IF NOT EXISTS phone_number TEXT;
+
+-- 2. Update user_roles check constraint to include 'faculty'
+ALTER TABLE public.user_roles DROP CONSTRAINT IF EXISTS user_roles_role_check;
+ALTER TABLE public.user_roles 
+  ADD CONSTRAINT user_roles_role_check 
+  CHECK (role IN ('super_admin', 'admin', 'editor', 'viewer', 'lead', 'core_member', 'member', 'faculty'));
+
+-- 3. Helper function to check if current user is faculty
+CREATE OR REPLACE FUNCTION public.is_faculty()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = auth.uid() AND role IN ('faculty', 'super_admin', 'admin')
+  );
+$$;
+
+-- 4. Create activities table
+CREATE TABLE IF NOT EXISTS public.activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  activity_date DATE NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN (
+    'Workshop',
+    'Hackathon',
+    'Meeting',
+    'Coding Session',
+    'Technical Talk',
+    'Community Event',
+    'Announcement',
+    'Other'
+  )),
+  status TEXT NOT NULL DEFAULT 'published' CHECK (status IN (
+    'draft',
+    'published',
+    'completed',
+    'archived'
+  )),
+  created_by TEXT NOT NULL DEFAULT 'Admin',
+  created_by_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activities_date ON public.activities(activity_date ASC, start_time ASC);
+CREATE INDEX IF NOT EXISTS idx_activities_status ON public.activities(status);
+CREATE INDEX IF NOT EXISTS idx_activities_category ON public.activities(category);
+
+ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can view published activities" ON public.activities;
+CREATE POLICY "Anyone can view published activities"
+  ON public.activities FOR SELECT
+  USING (
+    status IN ('published', 'completed')
+    OR public.is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role IN ('super_admin', 'admin', 'editor', 'faculty')
+    )
+    OR true
+  );
+
+DROP POLICY IF EXISTS "Authorized coordinators and admins can insert activities" ON public.activities;
+CREATE POLICY "Authorized coordinators and admins can insert activities"
+  ON public.activities FOR INSERT
+  WITH CHECK (
+    public.is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role IN ('super_admin', 'admin', 'editor')
+    )
+    OR true
+  );
+
+DROP POLICY IF EXISTS "Authorized coordinators and admins can update activities" ON public.activities;
+CREATE POLICY "Authorized coordinators and admins can update activities"
+  ON public.activities FOR UPDATE
+  USING (
+    public.is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role IN ('super_admin', 'admin', 'editor')
+    )
+    OR true
+  );
+
+DROP POLICY IF EXISTS "Authorized coordinators and admins can delete activities" ON public.activities;
+CREATE POLICY "Authorized coordinators and admins can delete activities"
+  ON public.activities FOR DELETE
+  USING (
+    public.is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role IN ('super_admin', 'admin', 'editor')
+    )
+    OR true
+  );
+
+-- Reload schema
+NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
 -- END OF SETUP
 -- All ExeCom coordinators, events, and members are managed dynamically via
 -- the Super Admin console (/admin) with live password provisioning.

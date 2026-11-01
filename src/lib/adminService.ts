@@ -388,7 +388,14 @@ export async function getAllExecomAdmin(): Promise<ExecomMember[]> {
 }
 
 export async function createExecomMember(member: Partial<ExecomMember>): Promise<ExecomMember> {
-  const { login_password: newPassword, role: _role, ...standardFields } = member;
+  const { login_password: newPassword, role: memberRole, ...standardFields } = member;
+
+  const determinedRole: AdminRole = memberRole || (
+    standardFields.designation?.toLowerCase().includes("faculty") ||
+    standardFields.designation?.toLowerCase().includes("staff advisor")
+      ? "faculty"
+      : "editor"
+  );
 
   const insertPayload: any = {
     full_name: standardFields.full_name,
@@ -403,11 +410,36 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
     is_active: standardFields.is_active ?? true,
   };
 
-  const { data, error } = await supabase
-    .from("execom_members")
-    .insert([insertPayload])
-    .select()
-    .single();
+  if (standardFields.phone_number !== undefined) {
+    insertPayload.phone_number = standardFields.phone_number;
+  }
+
+  let data: any;
+  let error: any;
+
+  try {
+    const res = await supabase
+      .from("execom_members")
+      .insert([insertPayload])
+      .select()
+      .single();
+    data = res.data;
+    error = res.error;
+  } catch (err: any) {
+    error = err;
+  }
+
+  // Retry without phone_number if column not cached in PostgREST yet
+  if (error && error.message && error.message.includes("phone_number")) {
+    delete insertPayload.phone_number;
+    const retryRes = await supabase
+      .from("execom_members")
+      .insert([insertPayload])
+      .select()
+      .single();
+    data = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) throw error;
 
@@ -418,7 +450,7 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
         fullName: data.full_name,
         email: data.email,
         password: newPassword,
-        role: "editor",
+        role: determinedRole,
       });
     } catch (e) {
       console.warn("Notice syncing credentials to auth:", e);
@@ -436,15 +468,43 @@ export async function updateExecomMember(
   id: string,
   updates: Partial<ExecomMember>
 ): Promise<ExecomMember> {
-  // Explicitly strip login_password and role before sending to PostgREST
-  const { login_password: newPassword, role: _role, ...standardUpdates } = updates;
+  const { login_password: newPassword, role: memberRole, ...standardUpdates } = updates;
 
-  const { data, error } = await supabase
-    .from("execom_members")
-    .update(standardUpdates)
-    .eq("id", id)
-    .select()
-    .single();
+  const determinedRole: AdminRole = memberRole || (
+    standardUpdates.designation?.toLowerCase().includes("faculty") ||
+    standardUpdates.designation?.toLowerCase().includes("staff advisor")
+      ? "faculty"
+      : "editor"
+  );
+
+  let data: any;
+  let error: any;
+
+  try {
+    const res = await supabase
+      .from("execom_members")
+      .update(standardUpdates)
+      .eq("id", id)
+      .select()
+      .single();
+    data = res.data;
+    error = res.error;
+  } catch (err: any) {
+    error = err;
+  }
+
+  // Retry without phone_number if column not cached in PostgREST yet
+  if (error && error.message && error.message.includes("phone_number")) {
+    const { phone_number: _p, ...cleanUpdates } = standardUpdates as any;
+    const retryRes = await supabase
+      .from("execom_members")
+      .update(cleanUpdates)
+      .eq("id", id)
+      .select()
+      .single();
+    data = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) throw error;
 
@@ -456,14 +516,16 @@ export async function updateExecomMember(
         fullName: data.full_name,
         email: activeEmail,
         password: newPassword,
-        role: "editor",
+        role: determinedRole,
       });
     } catch (e) {
-      console.warn("Notice syncing updated credentials to auth:", e);
+      console.warn("Notice syncing credentials to auth:", e);
     }
   }
 
-  await logActivity("Updated Execom Member", "execom_member", id, { name: data.full_name });
+  await logActivity("Updated Execom Member", "execom_member", id, {
+    updates: Object.keys(standardUpdates),
+  });
   return data;
 }
 

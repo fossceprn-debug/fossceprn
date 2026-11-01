@@ -246,7 +246,7 @@ export const Execom: React.FC = () => {
                       <p className="text-xs text-foss-gray line-clamp-1">
                         {member.department}
                       </p>
-                      {member.semester && (
+                      {member.semester && member.semester !== "Faculty" && (
                         <span className="inline-block mt-1 text-[11px] font-semibold text-foss-black bg-foss-lightBg px-2 py-0.5 rounded border border-border">
                           {member.semester}
                         </span>

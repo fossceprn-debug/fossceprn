@@ -22,6 +22,8 @@ import {
   Megaphone,
   Shield,
   Eye,
+  CalendarDays,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/lib/authContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +46,12 @@ import {
   getAllExecomAdmin,
   getAllAnnouncementsAdmin,
 } from "@/lib/adminService";
+import {
+  getTodayActivities,
+  getUpcomingActivities,
+  getAllActivities,
+} from "@/lib/activityService";
+import { ActivityCalendar, getCategoryBadgeClasses } from "@/components/calendar/ActivityCalendar";
 import { formatDate } from "@/lib/utils";
 import type {
   EventItem,
@@ -51,14 +59,20 @@ import type {
   AnnouncementItem,
   PublicationStatus,
   RegistrationStatus,
+  ActivityItem,
 } from "@/types";
 
 export const ExecomDashboard: React.FC = () => {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Active Tab: "events" | "team" | "announcements"
-  const [activeTab, setActiveTab] = useState<"events" | "team" | "announcements">("events");
+  // Active Tab: "events" | "calendar" | "team" | "announcements"
+  const [activeTab, setActiveTab] = useState<"events" | "calendar" | "team" | "announcements">("events");
+
+  // Activities State
+  const [todayActivities, setTodayActivities] = useState<ActivityItem[]>([]);
+  const [upcomingActivities, setUpcomingActivities] = useState<ActivityItem[]>([]);
+  const [upcomingActivitiesCount, setUpcomingActivitiesCount] = useState<number>(0);
 
   // Events State
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -98,14 +112,25 @@ export const ExecomDashboard: React.FC = () => {
     try {
       setEventsLoading(true);
       setMembersLoading(true);
-      const [eventsData, teamData, announceData] = await Promise.all([
+      const [eventsData, teamData, announceData, todayActs, upActs, allActs] = await Promise.all([
         getAllEventsAdmin(),
         getAllExecomAdmin(),
         getAllAnnouncementsAdmin(),
+        getTodayActivities(),
+        getUpcomingActivities(5),
+        getAllActivities(),
       ]);
       setEvents(eventsData);
       setExecomMembers(teamData);
       setAnnouncements(announceData);
+      setTodayActivities(todayActs);
+      setUpcomingActivities(upActs);
+
+      const todayStr = new Date().toISOString().split("T")[0];
+      const count = allActs.filter(
+        (a) => a.activity_date >= todayStr && a.status === "published"
+      ).length;
+      setUpcomingActivitiesCount(count);
     } catch (err) {
       console.error("Error loading ExeCom dashboard data:", err);
     } finally {
@@ -339,6 +364,23 @@ export const ExecomDashboard: React.FC = () => {
             </button>
 
             <button
+              onClick={() => setActiveTab("calendar")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === "calendar"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>Activity Calendar</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                activeTab === "calendar" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"
+              }`}>
+                {upcomingActivitiesCount}
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("team")}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeTab === "team"
@@ -463,6 +505,187 @@ export const ExecomDashboard: React.FC = () => {
                     <Clock className="w-5 h-5" />
                   </div>
                 </CardContent>
+              </Card>
+            </div>
+
+            {/* Community Activities & Today's Schedule Overview */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Left: Today's Schedule */}
+              <Card className="lg:col-span-5 p-5 border border-slate-200 bg-white rounded-2xl flex flex-col justify-between shadow-2xs">
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <Clock className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold text-slate-900">Today's Schedule</h3>
+                        <p className="text-[10px] text-slate-400">
+                          {new Date().toLocaleDateString("en-US", {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Badge
+                      variant={todayActivities.length > 0 ? "default" : "outline"}
+                      className={
+                        todayActivities.length > 0
+                          ? "bg-emerald-600 text-white text-[10px]"
+                          : "text-slate-400 text-[10px]"
+                      }
+                    >
+                      {todayActivities.length} {todayActivities.length === 1 ? "Activity" : "Activities"}
+                    </Badge>
+                  </div>
+
+                  {todayActivities.length === 0 ? (
+                    <div className="py-6 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-1.5">
+                      <CalendarDays className="w-7 h-7 text-slate-300" />
+                      <p>No community activities scheduled for today.</p>
+                      <button
+                        onClick={() => setActiveTab("calendar")}
+                        className="text-xs font-semibold text-emerald-700 hover:underline mt-1"
+                      >
+                        Open Activity Calendar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {todayActivities.map((act) => (
+                        <div
+                          key={act.id}
+                          onClick={() => setActiveTab("calendar")}
+                          className="p-2.5 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 cursor-pointer transition-all group"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <Badge
+                              variant="outline"
+                              className={`text-[9px] px-1.5 py-0 font-semibold border ${getCategoryBadgeClasses(
+                                act.category
+                              )}`}
+                            >
+                              {act.category}
+                            </Badge>
+                            <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-emerald-600" />
+                              {act.start_time}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors truncate">
+                            {act.title}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5 truncate">
+                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{act.venue}</span>
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 mt-3">
+                  <button
+                    onClick={() => setActiveTab("calendar")}
+                    className="w-full flex items-center justify-between text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                  >
+                    <span>View Today in Full Calendar</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </Card>
+
+              {/* Right: Next 5 Upcoming Activities */}
+              <Card className="lg:col-span-7 p-5 border border-slate-200 bg-white rounded-2xl flex flex-col justify-between shadow-2xs">
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <CalendarDays className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold text-slate-900">Upcoming Activities</h3>
+                        <p className="text-[10px] text-slate-400">Next community sessions</p>
+                      </div>
+                    </div>
+
+                    <Badge variant="secondary" className="text-xs font-bold text-slate-800">
+                      {upcomingActivitiesCount} Total
+                    </Badge>
+                  </div>
+
+                  {upcomingActivities.length === 0 ? (
+                    <div className="py-6 text-center text-slate-400 text-xs">
+                      No upcoming community activities announced yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {upcomingActivities.map((act) => {
+                        const dateObj = new Date(act.activity_date);
+                        return (
+                          <div
+                            key={act.id}
+                            onClick={() => setActiveTab("calendar")}
+                            className="p-2.5 bg-slate-50/70 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex flex-col items-center justify-center text-center shrink-0">
+                                <span className="text-[8px] uppercase font-bold text-slate-400 leading-none">
+                                  {dateObj.toLocaleDateString("en-US", { month: "short" })}
+                                </span>
+                                <span className="text-xs font-extrabold text-slate-800 leading-none mt-0.5">
+                                  {dateObj.getDate()}
+                                </span>
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[8px] px-1 py-0 font-semibold border ${getCategoryBadgeClasses(
+                                      act.category
+                                    )}`}
+                                  >
+                                    {act.category}
+                                  </Badge>
+                                  <span className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
+                                    <Clock className="w-3 h-3 text-slate-300" />
+                                    {act.start_time}
+                                  </span>
+                                </div>
+                                <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors truncate">
+                                  {act.title}
+                                </h4>
+                              </div>
+                            </div>
+
+                            <span className="text-[10px] text-slate-500 font-medium hidden sm:flex items-center gap-1 shrink-0">
+                              <MapPin className="w-3 h-3 text-slate-400" />
+                              <span className="truncate max-w-[120px]">{act.venue}</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">
+                    Showing next {upcomingActivities.length} activities
+                  </span>
+                  <button
+                    onClick={() => setActiveTab("calendar")}
+                    className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+                  >
+                    <span>Full Activity Calendar</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </Card>
             </div>
 
@@ -640,7 +863,31 @@ export const ExecomDashboard: React.FC = () => {
         )}
 
         {/* ================================================================ */}
-        {/* TAB 2: ALL EXECOM MEMBERS DIRECTORY (READ-ONLY) */}
+        {/* TAB 2: ACTIVITY CALENDAR */}
+        {/* ================================================================ */}
+        {activeTab === "calendar" && (
+          <div className="space-y-5">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                  ExeCom Activity Calendar
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Plan, coordinate, and review campus workshops, coding sessions, meetings, and hackathons.
+                </p>
+              </div>
+            </div>
+
+            <ActivityCalendar
+              readOnly={false}
+              canManage={true}
+              onActivityChange={loadData}
+            />
+          </div>
+        )}
+
+        {/* ================================================================ */}
+        {/* TAB 3: ALL EXECOM MEMBERS DIRECTORY (READ-ONLY) */}
         {/* ================================================================ */}
         {activeTab === "team" && (
           <div className="space-y-5">
