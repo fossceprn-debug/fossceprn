@@ -354,12 +354,13 @@ export const AdminExecom: React.FC = () => {
       ? (findAssignedCredential("amaldev@fossceprn") || findAssignedCredential("amal"))
       : undefined;
 
+    const cleanName = member.full_name.toLowerCase().replace(/[^a-z0-9]/g, "") || "coordinator";
     const suggestedEmail =
       existingCred?.email ||
       member.email ||
       (isAmal
-        ? "amaldev@fossceprn"
-        : `${member.full_name.toLowerCase().replace(/[^a-z0-9]/g, "")}@fossceprn`);
+        ? "amaldev@fossceprn.com"
+        : `${cleanName}@fossceprn.com`);
 
     setCredEmail(suggestedEmail);
     setCredPassword(existingCred?.password || generateSecurePassword());

@@ -1132,6 +1132,7 @@ export async function promoteApplicationToExecom(
         designation: application.desired_role,
         department: application.department,
         semester: application.semester,
+        email: application.email,
         photo_url: null,
         github_url: application.github_url || null,
         linkedin_url: application.linkedin_url || null,

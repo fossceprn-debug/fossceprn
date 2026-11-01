@@ -67,6 +67,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (roles.includes("editor")) return "editor";
         if (roles.includes("viewer")) return "viewer";
       }
+
+      // Check if user is registered in execom_members by user_id or email
+      const { data: execomMatch } = await supabase
+        .from("execom_members")
+        .select("id, designation")
+        .or(`user_id.eq.${userId},email.ilike.${email}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (execomMatch) {
+        return "editor";
+      }
     } catch (err) {
       console.warn("Error querying user_roles", err);
     }
