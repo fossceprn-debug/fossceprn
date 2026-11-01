@@ -333,12 +333,39 @@ BEGIN
   ELSE
     UPDATE auth.users
     SET encrypted_password = encrypted_pwd,
-        email_confirmed_at = COALESCE(email_confirmed_at, NOW())
+        email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+        confirmation_token = COALESCE(confirmation_token, ''),
+        recovery_token = COALESCE(recovery_token, ''),
+        email_change_token_new = COALESCE(email_change_token_new, ''),
+        email_change = COALESCE(email_change, '')
     WHERE email = admin_email
     RETURNING id INTO admin_uid;
   END IF;
 
-  -- 2. Create profile in public.profiles
+  -- 2. Ensure auth identity exists for GoTrue
+  INSERT INTO auth.identities (
+    id,
+    user_id,
+    identity_data,
+    provider,
+    provider_id,
+    last_sign_in_at,
+    created_at,
+    updated_at
+  ) VALUES (
+    admin_uid,
+    admin_uid,
+    format('{"sub":"%s","email":"%s"}', admin_uid::text, admin_email)::jsonb,
+    'email',
+    admin_uid::text,
+    NOW(),
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET identity_data = EXCLUDED.identity_data, updated_at = NOW();
+
+  -- 3. Create profile in public.profiles
   INSERT INTO public.profiles (id, email, full_name)
   VALUES (admin_uid, admin_email, 'FOSS CEPrn Administrator')
   ON CONFLICT (id) DO UPDATE
@@ -698,7 +725,11 @@ BEGIN
       raw_app_meta_data,
       raw_user_meta_data,
       created_at,
-      updated_at
+      updated_at,
+      confirmation_token,
+      email_change,
+      email_change_token_new,
+      recovery_token
     ) VALUES (
       '00000000-0000-0000-0000-000000000000',
       v_user_id,
@@ -710,7 +741,11 @@ BEGIN
       '{"provider":"email","providers":["email"]}'::jsonb,
       jsonb_build_object('full_name', p_full_name),
       NOW(),
-      NOW()
+      NOW(),
+      '',
+      '',
+      '',
+      ''
     );
 
     -- Insert into auth.identities so Supabase GoTrue Auth does not fail
@@ -719,6 +754,7 @@ BEGIN
       user_id,
       identity_data,
       provider,
+      provider_id,
       last_sign_in_at,
       created_at,
       updated_at
@@ -727,6 +763,7 @@ BEGIN
       v_user_id,
       format('{"sub":"%s","email":"%s"}', v_user_id::text, v_auth_email)::jsonb,
       'email',
+      v_user_id::text,
       NOW(),
       NOW(),
       NOW()
@@ -737,6 +774,10 @@ BEGIN
     SET email = v_auth_email,
         encrypted_password = v_encrypted_pwd,
         email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+        confirmation_token = COALESCE(confirmation_token, ''),
+        recovery_token = COALESCE(recovery_token, ''),
+        email_change_token_new = COALESCE(email_change_token_new, ''),
+        email_change = COALESCE(email_change, ''),
         raw_user_meta_data = jsonb_build_object('full_name', p_full_name),
         updated_at = NOW()
     WHERE id = v_user_id;
@@ -747,6 +788,7 @@ BEGIN
       user_id,
       identity_data,
       provider,
+      provider_id,
       last_sign_in_at,
       created_at,
       updated_at
@@ -755,6 +797,7 @@ BEGIN
       v_user_id,
       format('{"sub":"%s","email":"%s"}', v_user_id::text, v_auth_email)::jsonb,
       'email',
+      v_user_id::text,
       NOW(),
       NOW(),
       NOW()
@@ -901,20 +944,45 @@ BEGIN
     v_user_id := gen_random_uuid();
     INSERT INTO auth.users (
       instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-      raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+      confirmation_token, email_change, email_change_token_new, recovery_token
     ) VALUES (
       '00000000-0000-0000-0000-000000000000', v_user_id, 'authenticated', 'authenticated',
       LOWER(TRIM(v_app.email)), v_encrypted_pwd, NOW(),
       '{"provider":"email","providers":["email"]}'::jsonb,
-      jsonb_build_object('full_name', v_app.full_name), NOW(), NOW()
+      jsonb_build_object('full_name', v_app.full_name), NOW(), NOW(),
+      '', '', '', ''
     );
+
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
+      v_user_id, v_user_id,
+      format('{"sub":"%s","email":"%s"}', v_user_id::text, LOWER(TRIM(v_app.email)))::jsonb,
+      'email', v_user_id::text, NOW(), NOW(), NOW()
+    )
+    ON CONFLICT (id) DO NOTHING;
   ELSE
     UPDATE auth.users
     SET encrypted_password = v_encrypted_pwd,
         email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+        confirmation_token = COALESCE(confirmation_token, ''),
+        recovery_token = COALESCE(recovery_token, ''),
+        email_change_token_new = COALESCE(email_change_token_new, ''),
+        email_change = COALESCE(email_change, ''),
         raw_user_meta_data = jsonb_build_object('full_name', v_app.full_name),
         updated_at = NOW()
     WHERE id = v_user_id;
+
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
+      v_user_id, v_user_id,
+      format('{"sub":"%s","email":"%s"}', v_user_id::text, LOWER(TRIM(v_app.email)))::jsonb,
+      'email', v_user_id::text, NOW(), NOW(), NOW()
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET identity_data = format('{"sub":"%s","email":"%s"}', v_user_id::text, LOWER(TRIM(v_app.email)))::jsonb;
   END IF;
 
   INSERT INTO public.profiles (

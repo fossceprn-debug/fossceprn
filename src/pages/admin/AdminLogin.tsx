@@ -33,12 +33,6 @@ export const AdminLogin: React.FC = () => {
     }
   }, [user, isViewer, navigate]);
 
-  const handleAutofill = () => {
-    setEmailOrId("fossceprn@gmail.com");
-    setPassword("foss@123");
-    setErrorMsg("");
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -102,28 +96,6 @@ export const AdminLogin: React.FC = () => {
               <p className="text-xs text-slate-500 max-w-xs mx-auto">
                 Sign in with your Administrator credentials to access the FOSS CEPrn admin console.
               </p>
-            </div>
-
-            {/* Quick Credentials Autofill */}
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Administrator Sign-In:
-              </span>
-              <button
-                type="button"
-                onClick={handleAutofill}
-                className="w-full p-2.5 text-left rounded-xl bg-white border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all flex items-center justify-between"
-              >
-                <div>
-                  <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Super Admin
-                  </div>
-                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">fossceprn@gmail.com</div>
-                </div>
-                <Badge variant="outline" className="text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700">
-                  Autofill
-                </Badge>
-              </button>
             </div>
 
             {/* Error Message */}

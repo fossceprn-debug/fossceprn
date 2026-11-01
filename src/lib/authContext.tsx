@@ -170,35 +170,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Normalize custom handles like "amal@fossceprn" or "amal" into valid RFC email format for Supabase
     let normalizedEmail = credNormalizeEmail(rawInput);
+    const cleanHandle = rawInput.replace(/@.*$/, "");
 
-    // 1. Check Super Admin default credentials
-    const isDefaultAdmin =
-      (rawInput === DEFAULT_ADMIN_EMAIL || normalizedEmail === DEFAULT_ADMIN_EMAIL) &&
-      password === DEFAULT_ADMIN_PASSWORD;
+    // 1. Check Super Admin credentials (supports email or user ID aliases like "fossceprn", "admin")
+    const isAdminAccount =
+      rawInput === DEFAULT_ADMIN_EMAIL ||
+      normalizedEmail === DEFAULT_ADMIN_EMAIL ||
+      cleanHandle === "fossceprn" ||
+      cleanHandle === "admin" ||
+      cleanHandle === "superadmin";
 
-    if (isDefaultAdmin) {
-      const defaultAdminUser: AuthUser = {
-        id: "00000000-0000-0000-0000-000000000001",
-        email: DEFAULT_ADMIN_EMAIL,
-        full_name: "FOSS CEPrn Administrator",
-        role: "super_admin",
-      };
+    if (isAdminAccount) {
+      if (password === DEFAULT_ADMIN_PASSWORD) {
+        const defaultAdminUser: AuthUser = {
+          id: "00000000-0000-0000-0000-000000000001",
+          email: DEFAULT_ADMIN_EMAIL,
+          full_name: "FOSS CEPrn Administrator",
+          role: "super_admin",
+        };
 
-      // Perform live Supabase Auth login in background so the browser has an active JWT for all admin RPC/RLS operations
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.auth.signInWithPassword({
-            email: DEFAULT_ADMIN_EMAIL,
-            password: DEFAULT_ADMIN_PASSWORD,
-          });
-        } catch (e) {
-          console.warn("Background Supabase admin auth notice:", e);
+        // Perform live Supabase Auth login in background so the browser has an active JWT for all admin RPC/RLS operations
+        if (isSupabaseConfigured) {
+          try {
+            await supabase.auth.signInWithPassword({
+              email: DEFAULT_ADMIN_EMAIL,
+              password: DEFAULT_ADMIN_PASSWORD,
+            });
+          } catch (e) {
+            console.warn("Background Supabase admin auth notice:", e);
+          }
         }
-      }
 
-      setUser(defaultAdminUser);
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(defaultAdminUser));
-      return { success: true, role: "super_admin" };
+        setUser(defaultAdminUser);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(defaultAdminUser));
+        return { success: true, role: "super_admin" };
+      } else {
+        return {
+          success: false,
+          error: "Invalid password for administrator account.",
+        };
+      }
     }
 
     // 2. Check dynamically assigned ExeCom coordinator credentials (with immediate update support)
@@ -217,10 +228,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
         return { success: true, role: userRole };
       } else {
-        // The user ID matches an ExeCom member, but the password provided is invalid (e.g. old password)
+        // The user ID matches an ExeCom member, but the password provided is invalid
         return {
           success: false,
-          error: "Invalid password for this coordinator account. Please use your newly assigned password.",
+          error: "Invalid password for this coordinator account. Please verify your credentials.",
         };
       }
     }
@@ -260,43 +271,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Check if user is an ExeCom coordinator in database
-        const cleanHandle = rawInput.includes("@") ? rawInput.split("@")[0] : rawInput;
-        const { data: exMember } = await supabase
-          .from("execom_members")
-          .select("id, full_name, email, designation")
-          .or(`email.ilike.${rawInput},email.ilike.${normalizedEmail},full_name.ilike.%${cleanHandle}%`)
-          .limit(1)
-          .maybeSingle();
+        try {
+          const { data: exMember } = await supabase
+            .from("execom_members")
+            .select("id, full_name, email, designation")
+            .or(`email.ilike.${rawInput},email.ilike.${normalizedEmail},full_name.ilike.%${cleanHandle}%`)
+            .limit(1)
+            .maybeSingle();
 
-        if (exMember) {
-          const assigned =
-            findAssignedCredential(rawInput) ||
-            findAssignedCredential(exMember.email || "") ||
-            findAssignedCredential(exMember.full_name || "");
-          if (assigned) {
-            if (assigned.password === password) {
-              const userRole: AdminRole = assigned.role || "editor";
-              const loggedUser: AuthUser = {
-                id: exMember.id,
-                email: exMember.email || rawInput,
-                full_name: exMember.full_name || "ExeCom Coordinator",
-                role: userRole,
-              };
-              setUser(loggedUser);
-              localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
-              return { success: true, role: userRole };
-            } else {
-              return {
-                success: false,
-                error: "Invalid password for this coordinator account. Please use your newly assigned password.",
-              };
+          if (exMember) {
+            const assigned =
+              findAssignedCredential(rawInput) ||
+              findAssignedCredential(exMember.email || "") ||
+              findAssignedCredential(exMember.full_name || "");
+            if (assigned) {
+              if (assigned.password === password) {
+                const userRole: AdminRole = assigned.role || "editor";
+                const loggedUser: AuthUser = {
+                  id: exMember.id,
+                  email: exMember.email || rawInput,
+                  full_name: exMember.full_name || "ExeCom Coordinator",
+                  role: userRole,
+                };
+                setUser(loggedUser);
+                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
+                return { success: true, role: userRole };
+              } else {
+                return {
+                  success: false,
+                  error: "Invalid password for this coordinator account. Please verify your credentials.",
+                };
+              }
             }
+          }
+        } catch (dbErr) {
+          console.warn("Notice checking execom_members table during login:", dbErr);
+        }
+
+        // Sanitize error message so raw database / GoTrue schema crashes are never exposed to users
+        const rawErrMsg = authResult.error?.message || "";
+        let friendlyMsg = "Invalid email / user ID or password. Please verify your credentials.";
+        if (rawErrMsg) {
+          const lower = rawErrMsg.toLowerCase();
+          if (
+            lower.includes("invalid login credentials") ||
+            lower.includes("invalid credentials") ||
+            lower.includes("user not found")
+          ) {
+            friendlyMsg = "Invalid email / user ID or password. Please verify your credentials.";
+          } else if (lower.includes("email not confirmed")) {
+            friendlyMsg = "Email address has not been confirmed yet. Please verify your inbox.";
+          } else if (
+            !lower.includes("database error") &&
+            !lower.includes("schema") &&
+            !lower.includes("500") &&
+            !lower.includes("internal")
+          ) {
+            friendlyMsg = rawErrMsg;
           }
         }
 
-        return { success: false, error: authResult.error?.message || "Invalid email / user ID or password" };
+        return { success: false, error: friendlyMsg };
       } catch (err: any) {
-        return { success: false, error: err.message || "Failed to authenticate" };
+        return {
+          success: false,
+          error: "Invalid email / user ID or password. Please verify your credentials.",
+        };
       }
     }
 
