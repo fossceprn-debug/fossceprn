@@ -287,22 +287,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn("verify_execom_login RPC fallback:", rpcErr);
       }
 
-      // 4b. Direct table check on execom_members (login_password column)
+      // 4b. Direct table check on execom_members (using assigned credentials or linked auth user)
       try {
         const { data: exMember } = await supabase
           .from("execom_members")
-          .select("id, full_name, email, designation, login_password, user_id")
+          .select("id, full_name, email, designation, user_id")
           .or(`email.ilike.${rawInput},email.ilike.${normalizedEmail},email.ilike.${cleanHandle}@fossceprn.com,full_name.ilike.%${cleanHandle}%`)
           .limit(1)
           .maybeSingle();
 
-        if (exMember && exMember.login_password) {
-          if (exMember.login_password === password) {
+        if (exMember) {
+          const assigned =
+            findAssignedCredential(rawInput) ||
+            findAssignedCredential(exMember.email || "") ||
+            findAssignedCredential(exMember.full_name || "");
+
+          if (assigned && assigned.password === password) {
             const loggedUser: AuthUser = {
               id: exMember.user_id || exMember.id,
               email: exMember.email || rawInput,
               full_name: exMember.full_name || "ExeCom Coordinator",
-              role: "editor",
+              role: (assigned.role as AdminRole) || "editor",
             };
             setUser(loggedUser);
             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
@@ -312,12 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               password,
             }).catch(() => {});
 
-            return { success: true, role: "editor" };
-          } else {
-            return {
-              success: false,
-              error: "Invalid password for this coordinator account. Please verify your credentials.",
-            };
+            return { success: true, role: loggedUser.role };
           }
         }
       } catch (dbErr) {

@@ -388,18 +388,19 @@ export async function getAllExecomAdmin(): Promise<ExecomMember[]> {
 }
 
 export async function createExecomMember(member: Partial<ExecomMember>): Promise<ExecomMember> {
+  const { login_password: newPassword, role: _role, ...standardFields } = member;
+
   const insertPayload: any = {
-    full_name: member.full_name,
-    designation: member.designation,
-    department: member.department,
-    semester: member.semester,
-    email: member.email || null,
-    login_password: member.login_password || null,
-    photo_url: member.photo_url,
-    github_url: member.github_url,
-    linkedin_url: member.linkedin_url,
-    display_order: member.display_order ?? 0,
-    is_active: member.is_active ?? true,
+    full_name: standardFields.full_name,
+    designation: standardFields.designation,
+    department: standardFields.department,
+    semester: standardFields.semester,
+    email: standardFields.email || null,
+    photo_url: standardFields.photo_url || null,
+    github_url: standardFields.github_url || null,
+    linkedin_url: standardFields.linkedin_url || null,
+    display_order: standardFields.display_order ?? 0,
+    is_active: standardFields.is_active ?? true,
   };
 
   const { data, error } = await supabase
@@ -410,19 +411,13 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
 
   if (error) throw error;
 
-  if (data?.id && data.email && member.login_password) {
+  if (data?.id && data.email && newPassword) {
     try {
-      await supabase.rpc("save_execom_member_credentials", {
-        p_execom_id: data.id,
-        p_email: data.email,
-        p_password: member.login_password,
-        p_role: "editor",
-      });
-      saveAssignedCredential({
+      await provisionExecomCredentials({
         execomId: data.id,
         fullName: data.full_name,
         email: data.email,
-        password: member.login_password,
+        password: newPassword,
         role: "editor",
       });
     } catch (e) {
@@ -441,37 +436,31 @@ export async function updateExecomMember(
   id: string,
   updates: Partial<ExecomMember>
 ): Promise<ExecomMember> {
+  // Explicitly strip login_password and role before sending to PostgREST
+  const { login_password: newPassword, role: _role, ...standardUpdates } = updates;
+
   const { data, error } = await supabase
     .from("execom_members")
-    .update(updates)
+    .update(standardUpdates)
     .eq("id", id)
     .select()
     .single();
 
   if (error) throw error;
 
-  const activeEmail = updates.email || data.email;
-  const activePassword = updates.login_password || data.login_password;
-
-  if (data?.id && activeEmail && activePassword) {
+  const activeEmail = standardUpdates.email || data.email;
+  if (data?.id && activeEmail && newPassword) {
     try {
-      await supabase.rpc("save_execom_member_credentials", {
-        p_execom_id: data.id,
-        p_email: activeEmail,
-        p_password: activePassword,
-        p_role: "editor",
+      await provisionExecomCredentials({
+        execomId: data.id,
+        fullName: data.full_name,
+        email: activeEmail,
+        password: newPassword,
+        role: "editor",
       });
     } catch (e) {
       console.warn("Notice syncing updated credentials to auth:", e);
     }
-
-    saveAssignedCredential({
-      execomId: data.id,
-      fullName: data.full_name,
-      email: activeEmail,
-      password: activePassword,
-      role: "editor",
-    });
   }
 
   await logActivity("Updated Execom Member", "execom_member", id, { name: data.full_name });
@@ -1219,18 +1208,15 @@ export async function provisionExecomCredentials(params: {
     };
   }
 
-  // 2. Update execom_members email and login_password if execomId is provided
+  // 2. Safely update execom_members email if execomId is provided
   if (params.execomId) {
     try {
       await supabase
         .from("execom_members")
-        .update({
-          email: cleanEmail,
-          login_password: params.password,
-        })
+        .update({ email: cleanEmail })
         .eq("id", params.execomId);
     } catch (e) {
-      console.warn("Could not update execom_members email/password:", e);
+      console.warn("Could not update execom_members email:", e);
     }
   }
 
