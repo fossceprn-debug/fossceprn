@@ -1,8 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import type { EventItem, ProjectItem, ExecomMember, GalleryItem, SiteSettings } from "@/types";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const DEFAULT_SUPABASE_URL = "https://fngwxkuihlkfsiskicue.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_lwF0J4SQl7-aO0_PiGF9tg_4kG4dI6N";
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
