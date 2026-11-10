@@ -69,9 +69,18 @@ END $$;
 -- Step 3: Ensure Super Admin specifically has valid identity and non-null tokens
 DO $$
 DECLARE
-  admin_uid UUID := '00000000-0000-0000-0000-000000000001';
+  admin_uid UUID;
   admin_email TEXT := 'fossceprn@gmail.com';
 BEGIN
+  SELECT id INTO admin_uid 
+  FROM auth.users 
+  WHERE LOWER(TRIM(email)) = LOWER(TRIM(admin_email)) OR id = '00000000-0000-0000-0000-000000000001'
+  LIMIT 1;
+
+  IF admin_uid IS NULL THEN
+    admin_uid := '00000000-0000-0000-0000-000000000001';
+  END IF;
+
   UPDATE auth.users
   SET 
     confirmation_token = COALESCE(confirmation_token, ''),
@@ -82,28 +91,36 @@ BEGIN
     phone_change = COALESCE(phone_change, ''),
     phone_change_token = COALESCE(phone_change_token, ''),
     reauthentication_token = COALESCE(reauthentication_token, '')
-  WHERE email = admin_email;
+  WHERE id = admin_uid OR email = admin_email;
 
-  INSERT INTO auth.identities (
-    id,
-    user_id,
-    identity_data,
-    provider,
-    provider_id,
-    last_sign_in_at,
-    created_at,
-    updated_at
-  ) VALUES (
-    admin_uid,
-    admin_uid,
-    format('{"sub":"%s","email":"%s"}', admin_uid::text, admin_email)::jsonb,
-    'email',
-    admin_uid::text,
-    NOW(),
-    NOW(),
-    NOW()
-  )
-  ON CONFLICT (id) DO UPDATE
-  SET identity_data = EXCLUDED.identity_data, updated_at = NOW();
+  BEGIN
+    INSERT INTO auth.identities (
+      id,
+      user_id,
+      identity_data,
+      provider,
+      provider_id,
+      last_sign_in_at,
+      created_at,
+      updated_at
+    ) VALUES (
+      admin_uid,
+      admin_uid,
+      format('{"sub":"%s","email":"%s"}', admin_uid::text, admin_email)::jsonb,
+      'email',
+      admin_email,
+      NOW(),
+      NOW(),
+      NOW()
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET identity_data = EXCLUDED.identity_data, updated_at = NOW();
+  EXCEPTION WHEN OTHERS THEN
+    UPDATE auth.identities
+    SET user_id = admin_uid,
+        identity_data = format('{"sub":"%s","email":"%s"}', admin_uid::text, admin_email)::jsonb,
+        updated_at = NOW()
+    WHERE user_id = admin_uid OR id = admin_uid;
+  END;
 END $$;
 
