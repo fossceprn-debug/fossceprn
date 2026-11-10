@@ -408,6 +408,7 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
     linkedin_url: standardFields.linkedin_url || null,
     display_order: standardFields.display_order ?? 0,
     is_active: standardFields.is_active ?? true,
+    role: determinedRole,
   };
 
   if (standardFields.phone_number !== undefined) {
@@ -429,9 +430,10 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
     error = err;
   }
 
-  // Retry without phone_number if column not cached in PostgREST yet
-  if (error && error.message && error.message.includes("phone_number")) {
-    delete insertPayload.phone_number;
+  // Retry without phone_number or role if columns not cached in PostgREST yet
+  if (error && error.message && (error.message.includes("phone_number") || error.message.includes("role"))) {
+    if (error.message.includes("phone_number")) delete insertPayload.phone_number;
+    if (error.message.includes("role")) delete insertPayload.role;
     const retryRes = await supabase
       .from("execom_members")
       .insert([insertPayload])
@@ -477,13 +479,18 @@ export async function updateExecomMember(
       : "editor"
   );
 
+  const updatePayload: any = {
+    ...standardUpdates,
+    role: determinedRole,
+  };
+
   let data: any;
   let error: any;
 
   try {
     const res = await supabase
       .from("execom_members")
-      .update(standardUpdates)
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
@@ -493,9 +500,11 @@ export async function updateExecomMember(
     error = err;
   }
 
-  // Retry without phone_number if column not cached in PostgREST yet
-  if (error && error.message && error.message.includes("phone_number")) {
-    const { phone_number: _p, ...cleanUpdates } = standardUpdates as any;
+  // Retry without phone_number or role if columns not cached in PostgREST yet
+  if (error && error.message && (error.message.includes("phone_number") || error.message.includes("role"))) {
+    const cleanUpdates = { ...updatePayload };
+    if (error.message.includes("phone_number")) delete cleanUpdates.phone_number;
+    if (error.message.includes("role")) delete cleanUpdates.role;
     const retryRes = await supabase
       .from("execom_members")
       .update(cleanUpdates)

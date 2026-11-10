@@ -69,7 +69,7 @@ CREATE TRIGGER on_auth_user_created
 CREATE TABLE IF NOT EXISTS public.user_roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('super_admin', 'admin', 'editor', 'viewer', 'lead', 'core_member', 'member')),
+  role TEXT NOT NULL CHECK (role IN ('super_admin', 'admin', 'editor', 'viewer', 'lead', 'core_member', 'member', 'faculty')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, role)
 );
@@ -222,7 +222,7 @@ CREATE POLICY "Only admins can update site settings"
 -- Events Policies
 DROP POLICY IF EXISTS "Anyone can view published events" ON public.events;
 CREATE POLICY "Anyone can view published events"
-  ON public.events FOR SELECT USING (publication_status = 'published' OR public.is_admin());
+  ON public.events FOR SELECT USING (publication_status = 'published' OR public.is_admin() OR public.is_faculty() OR public.is_editor());
 
 DROP POLICY IF EXISTS "Only admins can manage events" ON public.events;
 CREATE POLICY "Only admins can manage events"
@@ -231,7 +231,7 @@ CREATE POLICY "Only admins can manage events"
 -- Projects Policies
 DROP POLICY IF EXISTS "Anyone can view published projects" ON public.projects;
 CREATE POLICY "Anyone can view published projects"
-  ON public.projects FOR SELECT USING (publication_status = 'published' OR public.is_admin());
+  ON public.projects FOR SELECT USING (publication_status = 'published' OR public.is_admin() OR public.is_faculty() OR public.is_editor());
 
 DROP POLICY IF EXISTS "Only admins can manage projects" ON public.projects;
 CREATE POLICY "Only admins can manage projects"
@@ -240,7 +240,7 @@ CREATE POLICY "Only admins can manage projects"
 -- Execom Policies
 DROP POLICY IF EXISTS "Active execom viewable by everyone" ON public.execom_members;
 CREATE POLICY "Active execom viewable by everyone"
-  ON public.execom_members FOR SELECT USING (is_active = true OR public.is_admin());
+  ON public.execom_members FOR SELECT USING (is_active = true OR public.is_admin() OR public.is_faculty() OR public.is_editor());
 
 DROP POLICY IF EXISTS "Only admins can manage execom" ON public.execom_members;
 CREATE POLICY "Only admins can manage execom"
@@ -450,7 +450,7 @@ END $$;
 ALTER TABLE public.user_roles DROP CONSTRAINT IF EXISTS user_roles_role_check;
 ALTER TABLE public.user_roles 
   ADD CONSTRAINT user_roles_role_check 
-  CHECK (role IN ('super_admin', 'admin', 'editor', 'viewer', 'lead', 'core_member', 'member'));
+  CHECK (role IN ('super_admin', 'admin', 'editor', 'viewer', 'lead', 'core_member', 'member', 'faculty'));
 
 -- Ensure fossceprn@gmail.com has super_admin role and clean up duplicate roles
 DO $$
@@ -538,9 +538,10 @@ BEGIN
       WHEN 'admin' THEN 2
       WHEN 'lead' THEN 3
       WHEN 'editor' THEN 4
-      WHEN 'core_member' THEN 5
-      WHEN 'viewer' THEN 6
-      ELSE 7
+      WHEN 'faculty' THEN 5
+      WHEN 'core_member' THEN 6
+      WHEN 'viewer' THEN 7
+      ELSE 8
     END
   LIMIT 1;
 
@@ -599,7 +600,7 @@ ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can view published announcements" ON public.announcements;
 CREATE POLICY "Public can view published announcements"
   ON public.announcements FOR SELECT
-  USING (publication_status = 'published' OR public.is_editor());
+  USING (publication_status = 'published' OR public.is_editor() OR public.is_faculty());
 
 DROP POLICY IF EXISTS "Editors and Admins can insert announcements" ON public.announcements;
 CREATE POLICY "Editors and Admins can insert announcements"
@@ -620,7 +621,7 @@ CREATE POLICY "Only Admins can delete announcements"
 DROP POLICY IF EXISTS "Admins can view activity logs" ON public.activity_logs;
 CREATE POLICY "Admins can view activity logs"
   ON public.activity_logs FOR SELECT
-  USING (public.is_admin() OR public.is_editor());
+  USING (public.is_admin() OR public.is_editor() OR public.is_faculty());
 
 DROP POLICY IF EXISTS "Authenticated users with role can insert logs" ON public.activity_logs;
 CREATE POLICY "Authenticated users with role can insert logs"
@@ -766,7 +767,7 @@ BEGIN
     v_auth_email := v_clean_email;
   END IF;
 
-  IF v_clean_role NOT IN ('super_admin', 'admin', 'editor', 'viewer', 'lead') THEN
+  IF v_clean_role NOT IN ('super_admin', 'admin', 'editor', 'viewer', 'lead', 'faculty') THEN
     v_clean_role := 'editor';
   END IF;
 
@@ -888,7 +889,8 @@ BEGIN
   IF p_execom_id IS NOT NULL THEN
     UPDATE public.execom_members
     SET user_id = v_user_id,
-        email = v_clean_email
+        email = v_clean_email,
+        role = v_clean_role
     WHERE id = p_execom_id;
   END IF;
 
@@ -940,7 +942,7 @@ BEGIN
   END IF;
 
   v_clean_role := LOWER(TRIM(COALESCE(p_role, 'editor')));
-  IF v_clean_role NOT IN ('super_admin', 'admin', 'editor', 'viewer', 'lead') THEN
+  IF v_clean_role NOT IN ('super_admin', 'admin', 'editor', 'viewer', 'lead', 'faculty') THEN
     v_clean_role := 'editor';
   END IF;
 
@@ -951,7 +953,8 @@ BEGIN
 
   UPDATE public.execom_members
   SET email = v_clean_email,
-      login_password = p_password
+      login_password = p_password,
+      role = v_clean_role
   WHERE id = p_execom_id;
 
   v_encrypted_pwd := crypt(p_password, gen_salt('bf', 10));
@@ -1036,7 +1039,7 @@ DECLARE
   v_clean TEXT := LOWER(TRIM(p_identifier));
   v_handle TEXT := REPLACE(REPLACE(v_clean, '@fossceprn.com', ''), '@fossceprn', '');
 BEGIN
-  SELECT m.id, m.full_name, m.email, m.designation, m.login_password, m.user_id
+  SELECT m.id, m.full_name, m.email, m.designation, m.login_password, m.user_id, m.role
   INTO v_member
   FROM public.execom_members m
   WHERE (
@@ -1059,7 +1062,7 @@ BEGIN
           'full_name', v_member.full_name,
           'email', COALESCE(v_member.email, v_clean),
           'designation', v_member.designation,
-          'role', 'editor'
+          'role', COALESCE(v_member.role, CASE WHEN v_member.designation ILIKE '%faculty%' OR v_member.designation ILIKE '%staff advisor%' THEN 'faculty' ELSE 'editor' END)
         )
       );
     ELSE

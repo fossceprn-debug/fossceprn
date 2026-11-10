@@ -287,11 +287,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (vData?.success && vData.member) {
+          const isFacultyMember =
+            vData.member.role === "faculty" ||
+            (vData.member.designation && (
+              vData.member.designation.toLowerCase().includes("faculty") ||
+              vData.member.designation.toLowerCase().includes("staff advisor")
+            ));
+          const userRole: AdminRole = (vData.member.role as AdminRole) || (isFacultyMember ? "faculty" : "editor");
           const loggedUser: AuthUser = {
             id: vData.member.id,
             email: vData.member.email,
             full_name: vData.member.full_name,
-            role: (vData.member.role as AdminRole) || "editor",
+            role: userRole,
           };
           setUser(loggedUser);
           localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
@@ -313,7 +320,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const { data: exMember } = await supabase
           .from("execom_members")
-          .select("id, full_name, email, designation, user_id")
+          .select("id, full_name, email, designation, user_id, role")
           .or(`email.ilike.${rawInput},email.ilike.${normalizedEmail},email.ilike.${cleanHandle}@fossceprn.com,full_name.ilike.%${cleanHandle}%`)
           .limit(1)
           .maybeSingle();
@@ -325,11 +332,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             findAssignedCredential(exMember.full_name || "");
 
           if (assigned && assigned.password === password) {
+            const isFacultyMember =
+              (exMember as any).role === "faculty" ||
+              (assigned.role === "faculty") ||
+              (exMember.designation && (
+                exMember.designation.toLowerCase().includes("faculty") ||
+                exMember.designation.toLowerCase().includes("staff advisor")
+              ));
+            const userRole: AdminRole = (assigned.role as AdminRole) || ((exMember as any).role as AdminRole) || (isFacultyMember ? "faculty" : "editor");
             const loggedUser: AuthUser = {
               id: exMember.user_id || exMember.id,
               email: exMember.email || rawInput,
               full_name: exMember.full_name || "ExeCom Coordinator",
-              role: (assigned.role as AdminRole) || "editor",
+              role: userRole,
             };
             setUser(loggedUser);
             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
