@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Calendar,
   Users,
@@ -65,9 +65,29 @@ import type {
 export const ExecomDashboard: React.FC = () => {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Active Tab: "events" | "calendar" | "team" | "announcements"
-  const [activeTab, setActiveTab] = useState<"events" | "calendar" | "team" | "announcements">("events");
+  const urlTab = searchParams.get("tab");
+  const [activeTab, setActiveTabState] = useState<"events" | "calendar" | "team" | "announcements">(
+    urlTab === "calendar" || urlTab === "team" || urlTab === "announcements" ? urlTab : "events"
+  );
+
+  const setActiveTab = (tab: "events" | "calendar" | "team" | "announcements") => {
+    setActiveTabState(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tab);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl && ["events", "calendar", "team", "announcements"].includes(tabFromUrl)) {
+      setActiveTabState(tabFromUrl as any);
+    }
+  }, [searchParams]);
 
   // Activities State
   const [todayActivities, setTodayActivities] = useState<ActivityItem[]>([]);
@@ -113,12 +133,30 @@ export const ExecomDashboard: React.FC = () => {
       setEventsLoading(true);
       setMembersLoading(true);
       const [eventsData, teamData, announceData, todayActs, upActs, allActs] = await Promise.all([
-        getAllEventsAdmin(),
-        getAllExecomAdmin(),
-        getAllAnnouncementsAdmin(),
-        getTodayActivities(),
-        getUpcomingActivities(5),
-        getAllActivities(),
+        getAllEventsAdmin().catch((e) => {
+          console.warn("Failed loading events:", e);
+          return [];
+        }),
+        getAllExecomAdmin().catch((e) => {
+          console.warn("Failed loading execom:", e);
+          return [];
+        }),
+        getAllAnnouncementsAdmin().catch((e) => {
+          console.warn("Failed loading announcements:", e);
+          return [];
+        }),
+        getTodayActivities().catch((e) => {
+          console.warn("Failed loading today activities:", e);
+          return [];
+        }),
+        getUpcomingActivities(5).catch((e) => {
+          console.warn("Failed loading upcoming activities:", e);
+          return [];
+        }),
+        getAllActivities().catch((e) => {
+          console.warn("Failed loading all activities:", e);
+          return [];
+        }),
       ]);
       setEvents(eventsData);
       setExecomMembers(teamData);
@@ -204,7 +242,7 @@ export const ExecomDashboard: React.FC = () => {
     setEventError("");
 
     try {
-      const publicUrl = await uploadStorageFile("events", file, "posters");
+      const publicUrl = await uploadStorageFile("event-images", file, "posters");
       setEventForm((prev) => ({ ...prev, cover_image: publicUrl }));
     } catch (err: any) {
       setEventError(err.message || "Failed to upload event poster.");

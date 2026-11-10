@@ -156,13 +156,13 @@ export const FacultyDashboard: React.FC = () => {
     setLoadingStats(true);
     try {
       const [s, l, todayActs, upActs, allActs] = await Promise.all([
-        getAdminOverviewStats(),
+        getAdminOverviewStats().catch(() => null),
         getActivityLogs(6).catch(() => []),
-        getTodayActivities(),
-        getUpcomingActivities(5),
-        getAllActivities(),
+        getTodayActivities().catch(() => []),
+        getUpcomingActivities(5).catch(() => []),
+        getAllActivities().catch(() => []),
       ]);
-      setStats(s);
+      if (s) setStats(s);
       setLogs(l);
       setTodayActivities(todayActs);
       setUpcomingActivities(upActs);

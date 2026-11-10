@@ -58,13 +58,13 @@ export const AdminOverview: React.FC = () => {
     setLoading(true);
     try {
       const [s, l, todayActs, upcomingActs, allActs] = await Promise.all([
-        getAdminOverviewStats(),
-        getActivityLogs(8),
-        getTodayActivities(),
-        getUpcomingActivities(5),
-        getAllActivities(),
+        getAdminOverviewStats().catch(() => null),
+        getActivityLogs(8).catch(() => []),
+        getTodayActivities().catch(() => []),
+        getUpcomingActivities(5).catch(() => []),
+        getAllActivities().catch(() => []),
       ]);
-      setStats(s);
+      if (s) setStats(s);
       setLogs(l);
       setTodayActivities(todayActs);
       setUpcomingActivities(upcomingActs);
