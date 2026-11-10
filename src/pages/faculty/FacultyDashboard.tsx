@@ -6,6 +6,8 @@ import {
   Clock,
   MapPin,
   Users,
+  UserCheck,
+  AlertCircle,
   LogOut,
   ExternalLink,
   Sparkles,
@@ -308,6 +310,31 @@ export const FacultyDashboard: React.FC = () => {
                         <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                         <span className="truncate">{act.venue}</span>
                       </p>
+
+                      {(act.deadline_date || (act.coordinators && act.coordinators.length > 0) || (act.volunteers && act.volunteers.length > 0)) && (
+                        <div className="mt-2 pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
+                          {act.coordinators && act.coordinators.length > 0 && (
+                            <span className="text-slate-600 font-medium flex items-center gap-1 truncate max-w-[200px]">
+                              <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span className="truncate">{act.coordinators.join(", ")}</span>
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                            {act.volunteers && act.volunteers.length > 0 && (
+                              <span className="text-indigo-600 font-semibold flex items-center gap-0.5">
+                                <Users className="w-2.5 h-2.5" />
+                                {act.volunteers.length} vol.
+                              </span>
+                            )}
+                            {act.deadline_date && (
+                              <span className="text-amber-700 font-semibold flex items-center gap-0.5 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+                                Due: {new Date(act.deadline_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -345,45 +372,72 @@ export const FacultyDashboard: React.FC = () => {
                     return (
                       <div
                         key={act.id}
-                        className="p-3 bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200/70 transition-all flex items-center justify-between gap-3"
+                        className="p-3 bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200/70 transition-all flex flex-col gap-2"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200/80 flex flex-col items-center justify-center text-center shrink-0">
-                            <span className="text-[9px] uppercase font-bold text-slate-400 leading-none">
-                              {dateObj.toLocaleDateString("en-US", { month: "short" })}
-                            </span>
-                            <span className="text-sm font-extrabold text-slate-800 leading-none mt-0.5">
-                              {dateObj.getDate()}
-                            </span>
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <Badge
-                                variant="outline"
-                                className={`text-[9px] px-1.5 py-0 font-semibold border ${getCategoryBadgeClasses(
-                                  act.category
-                                )}`}
-                              >
-                                {act.category}
-                              </Badge>
-                              <span className="text-[11px] text-slate-400 flex items-center gap-1 truncate">
-                                <Clock className="w-3 h-3 text-slate-300" />
-                                {act.start_time}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200/80 flex flex-col items-center justify-center text-center shrink-0">
+                              <span className="text-[9px] uppercase font-bold text-slate-400 leading-none">
+                                {dateObj.toLocaleDateString("en-US", { month: "short" })}
+                              </span>
+                              <span className="text-sm font-extrabold text-slate-800 leading-none mt-0.5">
+                                {dateObj.getDate()}
                               </span>
                             </div>
-                            <h4 className="text-xs font-bold text-slate-900 truncate">
-                              {act.title}
-                            </h4>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] px-1.5 py-0 font-semibold border ${getCategoryBadgeClasses(
+                                    act.category
+                                  )}`}
+                                >
+                                  {act.category}
+                                </Badge>
+                                <span className="text-[11px] text-slate-400 flex items-center gap-1 truncate">
+                                  <Clock className="w-3 h-3 text-slate-300" />
+                                  {act.start_time}
+                                </span>
+                              </div>
+                              <h4 className="text-xs font-bold text-slate-900 truncate">
+                                {act.title}
+                              </h4>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0 hidden sm:block">
+                            <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1 justify-end">
+                              <MapPin className="w-3 h-3 text-slate-400" />
+                              <span className="truncate max-w-[140px]">{act.venue}</span>
+                            </span>
                           </div>
                         </div>
 
-                        <div className="text-right shrink-0 hidden sm:block">
-                          <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1 justify-end">
-                            <MapPin className="w-3 h-3 text-slate-400" />
-                            <span className="truncate max-w-[140px]">{act.venue}</span>
-                          </span>
-                        </div>
+                        {(act.deadline_date || (act.coordinators && act.coordinators.length > 0) || (act.volunteers && act.volunteers.length > 0)) && (
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[10px]">
+                            {act.coordinators && act.coordinators.length > 0 && (
+                              <div className="flex items-center gap-1 text-slate-600 font-medium truncate max-w-[260px]">
+                                <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span className="truncate">{act.coordinators.join(", ")}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 shrink-0 ml-auto">
+                              {act.volunteers && act.volunteers.length > 0 && (
+                                <span className="text-indigo-600 font-semibold flex items-center gap-0.5">
+                                  <Users className="w-2.5 h-2.5" />
+                                  {act.volunteers.length} vol.
+                                </span>
+                              )}
+                              {act.deadline_date && (
+                                <span className="text-amber-700 font-semibold flex items-center gap-0.5 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                  <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+                                  Due: {new Date(act.deadline_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -420,3 +474,4 @@ export const FacultyDashboard: React.FC = () => {
     </div>
   );
 };
+

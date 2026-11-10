@@ -1306,6 +1306,12 @@ CREATE POLICY "Authorized coordinators and admins can delete activities"
     OR true
   );
 
+-- Step 5: Activity Coordinators, Volunteers & Deadlines (20261101000016)
+ALTER TABLE public.activities 
+  ADD COLUMN IF NOT EXISTS deadline_date DATE,
+  ADD COLUMN IF NOT EXISTS coordinators JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS volunteers JSONB DEFAULT '[]'::jsonb;
+
 -- Reload schema
 NOTIFY pgrst, 'reload schema';
 

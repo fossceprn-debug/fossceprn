@@ -67,3 +67,4 @@ export const FacultyProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
 
   return <>{children}</>;
 };
+

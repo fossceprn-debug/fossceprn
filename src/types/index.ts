@@ -95,16 +95,25 @@ export type ActivityCategory =
 
 export type ActivityStatus = "draft" | "published" | "completed" | "archived";
 
+export interface ActivityVolunteer {
+  name: string;
+  task: string;
+  member_id?: string | null;
+}
+
 export interface ActivityItem {
   id: string;
   title: string;
   description: string;
   activity_date: string; // YYYY-MM-DD
+  deadline_date?: string | null; // Date of deadline
   start_time: string;    // e.g. "10:00 AM" or "14:30"
   end_time?: string | null;
   venue: string;
   category: ActivityCategory;
   status: ActivityStatus;
+  coordinators?: string[]; // Any 2 ExeCom approved coordinators
+  volunteers?: ActivityVolunteer[]; // 1 to 10 ExeCom approved volunteers with assigned tasks
   created_by: string;
   created_by_id?: string | null;
   created_at: string;
