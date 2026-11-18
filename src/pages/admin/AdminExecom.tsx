@@ -416,8 +416,8 @@ export const AdminExecom: React.FC = () => {
         ? "amaldev@fossceprn.com"
         : `${cleanName}@fossceprn.com`);
 
-    setCredEmail(suggestedEmail);
-    setCredPassword(existingCred?.password || generateSecurePassword());
+    setCredEmail(member.email || suggestedEmail);
+    setCredPassword(member.login_password || existingCred?.password || generateSecurePassword());
     setCredRole((member.role as AdminRole) || (existingCred?.role as AdminRole) || (isFaculty ? "faculty" : "editor"));
     setCredFeedback(null);
     setProvisionedRecord(null);
@@ -460,6 +460,7 @@ export const AdminExecom: React.FC = () => {
               ? {
                   ...m,
                   email: credEmail,
+                  login_password: credPassword,
                   role: credRole,
                   user_id: res.userId || m.user_id || m.id,
                 }

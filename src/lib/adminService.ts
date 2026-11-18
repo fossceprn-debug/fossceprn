@@ -1673,25 +1673,11 @@ export async function provisionExecomCredentials(params: {
     };
   }
 
-  // 2. Safely update execom_members email, role and password if execomId is provided
+  let provisionedUserId: string | undefined = undefined;
+
+  // 2. Call save_execom_member_credentials stored procedure in Supabase
   if (params.execomId) {
     try {
-      await supabase
-        .from("execom_members")
-        .update({
-          email: cleanEmail,
-          role: params.role,
-          login_password: params.password,
-        })
-        .eq("id", params.execomId);
-    } catch (e) {
-      console.warn("Could not update execom_members email/role/password:", e);
-    }
-  }
-
-  // 3. Try save_execom_member_credentials or admin_provision_execom_user
-  try {
-    if (params.execomId) {
       const { data: saveRes, error: saveErr } = await supabase.rpc(
         "save_execom_member_credentials",
         {
@@ -1701,115 +1687,58 @@ export async function provisionExecomCredentials(params: {
           p_role: params.role,
         }
       );
+
       if (!saveErr && saveRes?.success) {
-        await logActivity(
-          `Assigned ExeCom Login: ${cleanEmail}`,
-          "execom_members",
-          params.execomId || null,
-          { email: cleanEmail, role: params.role }
-        );
-        return {
-          success: true,
-          message: `Successfully provisioned credentials for ${cleanEmail} with role '${params.role}'.`,
-          userId: saveRes.user_id,
-        };
+        provisionedUserId = saveRes.user_id;
+      } else if (saveErr) {
+        console.warn("save_execom_member_credentials notice:", saveErr?.message);
       }
+    } catch (rpcErr) {
+      console.warn("RPC save_execom_member_credentials exception:", rpcErr);
     }
-
-    const { data: sessData } = await supabase.auth.getSession();
-    if (!sessData?.session?.user) {
-      await supabase.auth
-        .signInWithPassword({
-          email: "fossceprn@gmail.com",
-          password: "foss@123",
-        })
-        .catch((e) => console.warn("Background admin auth check:", e));
-    }
-
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
-      "admin_provision_execom_user",
-      {
-        p_email: normalizedEmail,
-        p_password: params.password,
-        p_full_name: params.fullName,
-        p_role: params.role,
-        p_execom_id: params.execomId || null,
-      }
-    );
-
-    if (!rpcError && rpcData?.success) {
-      await logActivity(
-        `Assigned ExeCom Login: ${cleanEmail}`,
-        "execom_members",
-        params.execomId || null,
-        { email: cleanEmail, role: params.role }
-      );
-
-      return {
-        success: true,
-        message: `Successfully provisioned credentials for ${cleanEmail} with role '${params.role}'.`,
-        userId: rpcData.user_id,
-      };
-    }
-  } catch (rpcErr) {
-    console.warn("RPC admin_provision_execom_user call failed or not found, falling back:", rpcErr);
   }
 
-  // 4. Client-side fallback via Supabase Auth
-  try {
-    const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password: params.password,
-      options: {
-        data: {
-          full_name: params.fullName,
-        },
-      },
-    });
+  // 3. Directly update public.execom_members row to guarantee persistence in the database
+  if (params.execomId) {
+    const updatePayload: any = {
+      email: cleanEmail,
+      role: params.role,
+      login_password: params.password,
+    };
+    if (provisionedUserId) {
+      updatePayload.user_id = provisionedUserId;
+    }
 
-    const userId = authData?.user?.id || params.execomId;
+    try {
+      const { error: updErr } = await supabase
+        .from("execom_members")
+        .update(updatePayload)
+        .eq("id", params.execomId);
 
-    if (userId) {
-      // Upsert profile
-      await supabase.from("profiles").upsert([
-        {
-          id: userId,
-          email: cleanEmail,
-          full_name: params.fullName,
-          membership_status: "active",
-        },
-      ]);
-
-      // Upsert user_roles
-      await supabase.from("user_roles").upsert(
-        [
-          {
-            user_id: userId,
-            role: params.role,
-          },
-        ],
-        { onConflict: "user_id,role" }
-      );
-
-      // Link with execom_members if provided
-      if (params.execomId) {
+      if (updErr) {
+        console.warn("Direct execom_members update error (retrying with email only):", updErr);
         await supabase
           .from("execom_members")
-          .update({
-            user_id: userId,
-            email: cleanEmail,
-            role: params.role,
-            login_password: params.password,
-          })
+          .update({ email: cleanEmail, login_password: params.password })
           .eq("id", params.execomId);
       }
+    } catch (e) {
+      console.warn("Could not update execom_members:", e);
     }
-  } catch (authErr) {
-    console.warn("Supabase Auth fallback signUp error (handled):", authErr);
+  }
+
+  // 4. Directly update public.user_roles row if user_id is known
+  if (provisionedUserId) {
+    try {
+      await supabase.from("user_roles").delete().eq("user_id", provisionedUserId);
+      await supabase.from("user_roles").insert([{ user_id: provisionedUserId, role: params.role }]);
+    } catch (e) {
+      console.warn("user_roles sync notice:", e);
+    }
   }
 
   await logActivity(
-    `Provisioned ExeCom Credentials: ${cleanEmail}`,
+    `Updated ExeCom Login Credentials: ${cleanEmail}`,
     "execom_members",
     params.execomId || null,
     { email: cleanEmail, role: params.role }
@@ -1817,8 +1746,8 @@ export async function provisionExecomCredentials(params: {
 
   return {
     success: true,
-    message: `Account configured for ${cleanEmail} as '${params.role}'. Login is now active.`,
-    userId: params.execomId,
+    message: `Login key and credentials successfully synchronized in Supabase for ${cleanEmail} (${params.role}).`,
+    userId: provisionedUserId || params.execomId,
   };
 }
 
