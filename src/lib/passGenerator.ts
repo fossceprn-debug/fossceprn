@@ -1,4 +1,5 @@
 import { formatDate } from "./utils";
+import jsPDF from "jspdf";
 
 export interface EventPassTheme {
   id: string;
@@ -735,4 +736,49 @@ export async function generateInvitationPassImage(options: InvitationPassOptions
   ctx.stroke();
 
   return canvas.toDataURL("image/png");
+}
+
+export interface TicketPdfResult {
+  pdfBlob: Blob;
+  pdfDataUri: string;
+  pdfBase64: string;
+  filename: string;
+  passDataUrl: string;
+}
+
+/**
+ * Generates a high-resolution, downloadable PDF ticket containing the full
+ * branded invitation pass with embedded QR code.
+ * 100% Free, runs entirely in the browser using jsPDF.
+ */
+export async function generateTicketPdf(
+  options: InvitationPassOptions
+): Promise<TicketPdfResult> {
+  const passDataUrl = await generateInvitationPassImage(options);
+
+  // Standard event ticket landscape dimensions: 210 x 95 mm
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: [210, 95],
+  });
+
+  // Ticket dimensions: 200mm wide x 81.5mm tall (matching 1300x530 aspect ratio)
+  // Perfectly centered on page: x = 5mm, y = 6.75mm
+  doc.addImage(passDataUrl, "PNG", 5, 6.75, 200, 81.5, undefined, "FAST");
+
+  const cleanSlug = (options.eventSlug || "event").replace(/[^a-zA-Z0-9_-]/g, "");
+  const filename = `Ticket-${options.ticketCode}-${cleanSlug}.pdf`;
+
+  const pdfBlob = doc.output("blob");
+  const pdfDataUri = doc.output("datauristring");
+  const pdfBase64 = pdfDataUri.split(",")[1] || "";
+
+  return {
+    pdfBlob,
+    pdfDataUri,
+    pdfBase64,
+    filename,
+    passDataUrl,
+  };
 }

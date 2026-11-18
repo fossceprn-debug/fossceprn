@@ -794,6 +794,9 @@ function sanitizeEventPayload(payload: Partial<EventItem>): Record<string, any> 
     "volunteer2_name",
     "volunteer2_id",
     "volunteer2_phone",
+    "certificate_template_url",
+    "certificate_drive_link",
+    "certificate_enabled",
   ];
 
   const sanitized: Record<string, any> = {};
@@ -975,12 +978,46 @@ export async function registerForEvent(payload: {
   class_semester?: string | null;
   responses?: Record<string, any>;
 }): Promise<{ registration: EventRegistration; error?: string }> {
+  const normalizedEmail = payload.email.trim().toLowerCase();
+
+  // Prevent duplicate registrations for the same event
+  if (isSupabaseConfigured) {
+    try {
+      const { data: existing, error: checkErr } = await supabase
+        .from("event_registrations")
+        .select("*")
+        .eq("event_id", payload.event_id)
+        .ilike("email", normalizedEmail)
+        .maybeSingle();
+
+      if (!checkErr && existing) {
+        return {
+          registration: existing as EventRegistration,
+          error: `Already registered: An entry for ${normalizedEmail} already exists for this event (Ticket: ${existing.ticket_code}). Duplicate registrations are prevented.`,
+        };
+      }
+    } catch (checkEx) {
+      console.warn("Error checking for existing event registration:", checkEx);
+    }
+  } else {
+    const cached = getStoredEventRegistrations();
+    const existing = cached.find(
+      (r) => r.event_id === payload.event_id && r.email.toLowerCase() === normalizedEmail
+    );
+    if (existing) {
+      return {
+        registration: existing,
+        error: `Already registered: An entry for ${normalizedEmail} already exists for this event (Ticket: ${existing.ticket_code}). Duplicate registrations are prevented.`,
+      };
+    }
+  }
+
   const ticketCode = generateTicketCode();
   const newRegistration: EventRegistration = {
     id: crypto.randomUUID(),
     event_id: payload.event_id,
     full_name: payload.full_name.trim(),
-    email: payload.email.trim().toLowerCase(),
+    email: normalizedEmail,
     phone: payload.phone?.trim() || null,
     class_semester: payload.class_semester?.trim() || null,
     responses: payload.responses || {},
@@ -988,6 +1025,10 @@ export async function registerForEvent(payload: {
     checked_in: false,
     checked_in_at: null,
     created_at: new Date().toISOString(),
+    email_status: "pending",
+    email_sent_at: null,
+    email_error: null,
+    certificate_issued: false,
   };
 
   let savedRegistration = newRegistration;
@@ -1006,6 +1047,7 @@ export async function registerForEvent(payload: {
             responses: newRegistration.responses,
             ticket_code: newRegistration.ticket_code,
             checked_in: false,
+            email_status: "pending",
           },
         ])
         .select()
@@ -1015,6 +1057,12 @@ export async function registerForEvent(payload: {
         savedRegistration = data as EventRegistration;
       } else if (error) {
         console.warn("Supabase event registration failed, falling back to local:", error.message);
+        if (error.code === "23505" || error.message?.includes("duplicate") || error.message?.includes("unique")) {
+          return {
+            registration: newRegistration,
+            error: `Already registered: A registration with email ${normalizedEmail} already exists for this event.`,
+          };
+        }
       }
     } catch (err: any) {
       console.warn("Exception during event registration insert:", err);
@@ -1026,6 +1074,91 @@ export async function registerForEvent(payload: {
   saveStoredEventRegistrations([savedRegistration, ...cached]);
 
   return { registration: savedRegistration };
+}
+
+export async function updateRegistrationEmailStatus(
+  registrationId: string,
+  emailStatus: "pending" | "sent" | "failed",
+  emailError?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  const sentAt = emailStatus === "sent" ? new Date().toISOString() : null;
+
+  if (isSupabaseConfigured) {
+    try {
+      const { error } = await supabase
+        .from("event_registrations")
+        .update({
+          email_status: emailStatus,
+          email_sent_at: sentAt,
+          email_error: emailError || null,
+        })
+        .eq("id", registrationId);
+
+      if (error) {
+        console.warn("Failed to update email status in Supabase:", error.message);
+      }
+    } catch (err: any) {
+      console.warn("Exception updating registration email status:", err);
+    }
+  }
+
+  // Also update local cache
+  const cached = getStoredEventRegistrations();
+  const updated = cached.map((r) =>
+    r.id === registrationId
+      ? {
+          ...r,
+          email_status: emailStatus,
+          email_sent_at: sentAt,
+          email_error: emailError || null,
+        }
+      : r
+  );
+  saveStoredEventRegistrations(updated);
+
+  return { success: true };
+}
+
+export async function updateRegistrationCertificateStatus(
+  registrationId: string,
+  issued: boolean,
+  certificateId?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  const issuedAt = issued ? new Date().toISOString() : null;
+
+  if (isSupabaseConfigured) {
+    try {
+      const { error } = await supabase
+        .from("event_registrations")
+        .update({
+          certificate_issued: issued,
+          certificate_issued_at: issuedAt,
+          certificate_id: certificateId || null,
+        })
+        .eq("id", registrationId);
+
+      if (error) {
+        console.warn("Failed to update certificate status in Supabase:", error.message);
+      }
+    } catch (err: any) {
+      console.warn("Exception updating certificate status:", err);
+    }
+  }
+
+  const cached = getStoredEventRegistrations();
+  const updated = cached.map((r) =>
+    r.id === registrationId
+      ? {
+          ...r,
+          certificate_issued: issued,
+          certificate_issued_at: issuedAt,
+          certificate_id: certificateId || null,
+        }
+      : r
+  );
+  saveStoredEventRegistrations(updated);
+
+  return { success: true };
 }
 
 export async function getEventRegistrations(eventId: string): Promise<EventRegistration[]> {

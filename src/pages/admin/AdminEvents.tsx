@@ -21,6 +21,7 @@ import {
   Link2,
   Database,
   Check,
+  Award,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -105,6 +106,9 @@ export const AdminEvents: React.FC = () => {
     volunteer2_name: "",
     volunteer2_id: "" as string | null,
     volunteer2_type: "execom" as "execom" | "external",
+    certificate_drive_link: "",
+    certificate_template_url: "",
+    certificate_enabled: true,
   });
 
   const loadData = async () => {
@@ -164,6 +168,9 @@ export const AdminEvents: React.FC = () => {
       volunteer2_name: "",
       volunteer2_id: "",
       volunteer2_type: "execom",
+      certificate_drive_link: "",
+      certificate_template_url: "",
+      certificate_enabled: true,
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -234,6 +241,9 @@ export const AdminEvents: React.FC = () => {
       volunteer2_name: evt.volunteer2_name || (foundV2 ? foundV2.full_name : ""),
       volunteer2_id: evt.volunteer2_id || (foundV2 ? foundV2.id : ""),
       volunteer2_type: foundV2 || !evt.volunteer2_name ? "execom" : "external",
+      certificate_drive_link: evt.certificate_drive_link || "",
+      certificate_template_url: evt.certificate_template_url || "",
+      certificate_enabled: evt.certificate_enabled ?? true,
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -1168,6 +1178,50 @@ export const AdminEvents: React.FC = () => {
                   }
                 />
               )}
+            </div>
+
+            {/* Certificate & Google Drive Configuration */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <Award className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold text-slate-800">
+                  Participation Certificates & Google Drive
+                </h4>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Coordinator Edit-Enabled Google Drive Link
+                </label>
+                <Input
+                  placeholder="https://drive.google.com/drive/folders/..."
+                  value={formData.certificate_drive_link}
+                  onChange={(e) =>
+                    setFormData({ ...formData, certificate_drive_link: e.target.value })
+                  }
+                  className="h-9 text-xs rounded-xl bg-white"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Provide an edit-enabled Google Drive link for organizing and distributing certificates to attended participants.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Custom Certificate Background Template URL (Optional)
+                </label>
+                <Input
+                  placeholder="https://... (or leave blank for official FOSS template)"
+                  value={formData.certificate_template_url}
+                  onChange={(e) =>
+                    setFormData({ ...formData, certificate_template_url: e.target.value })
+                  }
+                  className="h-9 text-xs rounded-xl bg-white"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Leave blank to use the built-in FOSS United Students Chapter official certificate template.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">

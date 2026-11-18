@@ -30,6 +30,12 @@ export interface EventRegistration {
   checked_in_at?: string | null;
   created_at: string;
   event_title?: string;
+  email_status?: "pending" | "sent" | "failed" | string;
+  email_sent_at?: string | null;
+  email_error?: string | null;
+  certificate_issued?: boolean;
+  certificate_issued_at?: string | null;
+  certificate_id?: string | null;
 }
 
 export interface Profile {
@@ -99,6 +105,9 @@ export interface EventItem {
   volunteer2_name?: string | null;
   volunteer2_id?: string | null;
   volunteer2_phone?: string | null;
+  certificate_template_url?: string | null;
+  certificate_drive_link?: string | null;
+  certificate_enabled?: boolean;
   created_at: string;
 }
 

@@ -89,9 +89,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col lg:flex-row antialiased w-full max-w-full overflow-x-hidden">
-      {/* DESKTOP SIDEBAR */}
-      <aside className="hidden lg:flex lg:w-64 xl:w-72 flex-col justify-between bg-white border-r border-slate-200/80 sticky top-0 h-screen z-30 shrink-0">
+    <div className="h-screen h-[100dvh] bg-[#f8fafc] text-slate-800 flex flex-col lg:flex-row antialiased w-full max-w-full overflow-hidden">
+      {/* DESKTOP SIDEBAR (Static - Fixed in place) */}
+      <aside className="hidden lg:flex lg:w-64 xl:w-72 flex-col justify-between bg-white border-r border-slate-200/80 h-screen sticky top-0 shrink-0 z-30 select-none">
         <div className="flex flex-col h-full overflow-hidden">
           {/* Sidebar Header */}
           <div className="p-5 border-b border-slate-100 flex items-center justify-between">
@@ -307,9 +307,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       )}
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col min-w-0 w-full max-w-full overflow-x-hidden">
-        {/* Top Navbar */}
-        <header className="h-16 bg-white border-b border-slate-200/80 px-3 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-20 w-full max-w-full">
+      <div className="flex-1 flex flex-col min-w-0 h-screen h-[100dvh] w-full max-w-full overflow-hidden">
+        {/* Top Navbar (Static - Pinned to top) */}
+        <header className="h-16 shrink-0 bg-white border-b border-slate-200/80 px-3 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-20 w-full max-w-full select-none">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => setMobileMenuOpen(true)}
@@ -371,22 +371,24 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           </div>
         </header>
 
-        {/* Page Content Body */}
-        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6 overflow-x-hidden">
-          {/* Header Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                {title}
-              </h1>
-              {subtitle && <p className="text-xs sm:text-sm text-slate-500 mt-1">{subtitle}</p>}
+        {/* Page Content Body (Scrolls independently while sidebar & top header stay static) */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden w-full">
+          <main className="p-3.5 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+            {/* Header Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                  {title}
+                </h1>
+                {subtitle && <p className="text-xs sm:text-sm text-slate-500 mt-1">{subtitle}</p>}
+              </div>
+              {actions && <div className="flex items-center gap-2.5 shrink-0">{actions}</div>}
             </div>
-            {actions && <div className="flex items-center gap-2.5 shrink-0">{actions}</div>}
-          </div>
 
-          {/* Children Content */}
-          {children}
-        </main>
+            {/* Children Content */}
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );

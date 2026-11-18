@@ -40,6 +40,8 @@ import {
   CheckCircle2,
   XCircle,
   Ticket,
+  Award,
+  Send,
 } from "lucide-react";
 import { useAuth } from "@/lib/authContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,6 +76,10 @@ import { ActivityCalendar, getCategoryBadgeClasses } from "@/components/calendar
 import { formatDate } from "@/lib/utils";
 import { EventRegistrationQuestionsBuilder } from "@/components/events/EventRegistrationQuestionsBuilder";
 import { EventAttendeesModal } from "@/components/events/EventAttendeesModal";
+import { resendRegistrationTicket } from "@/lib/emailService";
+import { generateTicketPdf } from "@/lib/passGenerator";
+import { generateAttendeeCertificate } from "@/lib/certificateGenerator";
+import QRCode from "qrcode";
 import type {
   EventItem,
   ExecomMember,
@@ -203,6 +209,9 @@ export const ExecomDashboard: React.FC = () => {
     volunteer2_name: "",
     volunteer2_id: "" as string | null,
     volunteer2_type: "execom" as "execom" | "external",
+    certificate_drive_link: "",
+    certificate_template_url: "",
+    certificate_enabled: true,
     created_by: user?.full_name || user?.email || "ExeCom Coordinator",
     created_by_id: user?.id || null,
   });
@@ -323,6 +332,119 @@ export const ExecomDashboard: React.FC = () => {
   const [participantStatusFilter, setParticipantStatusFilter] = useState<"all" | "checked_in" | "pending">("all");
   const [togglingAttendanceId, setTogglingAttendanceId] = useState<string | null>(null);
   const [copiedTicketCode, setCopiedTicketCode] = useState<string | null>(null);
+  const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
+  const [downloadingTicketId, setDownloadingTicketId] = useState<string | null>(null);
+  const [generatingCertId, setGeneratingCertId] = useState<string | null>(null);
+  const [participantAlert, setParticipantAlert] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleResendParticipantEmail = async (reg: EventRegistration) => {
+    const curEvt = events.find((e) => e.id === selectedParticipantEventId);
+    if (!curEvt) return;
+    setResendingEmailId(reg.id);
+    setParticipantAlert(null);
+    try {
+      const res = await resendRegistrationTicket(reg, curEvt);
+      if (res.success) {
+        setParticipantAlert({
+          type: "success",
+          text: `Ticket successfully sent to ${reg.email}!`,
+        });
+        setParticipantRegistrations((prev) =>
+          prev.map((r) =>
+            r.id === reg.id
+              ? { ...r, email_status: "sent", email_sent_at: new Date().toISOString(), email_error: null }
+              : r
+          )
+        );
+      } else {
+        setParticipantAlert({
+          type: "error",
+          text: res.error || `Could not deliver ticket to ${reg.email}`,
+        });
+        setParticipantRegistrations((prev) =>
+          prev.map((r) =>
+            r.id === reg.id
+              ? { ...r, email_status: "failed", email_error: res.error }
+              : r
+          )
+        );
+      }
+    } catch (err: any) {
+      setParticipantAlert({ type: "error", text: err?.message || "Failed to resend ticket." });
+    } finally {
+      setResendingEmailId(null);
+    }
+  };
+
+  const handleDownloadSingleTicket = async (reg: EventRegistration) => {
+    const curEvt = events.find((e) => e.id === selectedParticipantEventId);
+    if (!curEvt) return;
+    setDownloadingTicketId(reg.id);
+    try {
+      const qrPayload = JSON.stringify({
+        ticket_code: reg.ticket_code,
+        event_id: reg.event_id,
+        event_title: curEvt.title,
+        attendee: reg.full_name,
+        email: reg.email,
+        timestamp: reg.created_at,
+      });
+
+      const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+        width: 320,
+        margin: 1,
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+
+      const { pdfDataUri, filename } = await generateTicketPdf({
+        eventTitle: curEvt.title,
+        startDate: curEvt.start_date,
+        venue: curEvt.venue,
+        attendeeName: reg.full_name,
+        attendeeEmail: reg.email,
+        attendeePhone: reg.phone,
+        classSemester: reg.class_semester,
+        ticketCode: reg.ticket_code,
+        qrDataUrl: qrDataUrl,
+        coordinator1Name: curEvt.coordinator1_name || curEvt.coordinator_name || "FOSS Chapter Lead",
+        coordinator1Phone: curEvt.coordinator1_phone || curEvt.coordinator_phone || "",
+        coordinator2Name: curEvt.coordinator2_name || "",
+        coordinator2Phone: curEvt.coordinator2_phone || "",
+        eventId: curEvt.id,
+        eventSlug: curEvt.slug,
+      });
+
+      const link = document.createElement("a");
+      link.href = pdfDataUri;
+      link.download = filename;
+      link.click();
+    } catch (err: any) {
+      alert("Failed to download PDF ticket: " + (err?.message || ""));
+    } finally {
+      setDownloadingTicketId(null);
+    }
+  };
+
+  const handleDownloadSingleCert = async (reg: EventRegistration) => {
+    const curEvt = events.find((e) => e.id === selectedParticipantEventId);
+    if (!curEvt) return;
+    if (!reg.checked_in) {
+      alert("Only attended participants (marked Present) can receive a certificate.");
+      return;
+    }
+    setGeneratingCertId(reg.id);
+    try {
+      const cert = await generateAttendeeCertificate({ event: curEvt, attendee: reg });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(cert.pdfBlob);
+      link.download = cert.filename;
+      link.click();
+    } catch (err: any) {
+      alert(err?.message || "Failed to generate certificate.");
+    } finally {
+      setGeneratingCertId(null);
+    }
+  };
 
   const handleApproveEvent = async (evt: EventItem) => {
     if (!canApproveEvent(evt)) {
@@ -791,6 +913,9 @@ export const ExecomDashboard: React.FC = () => {
       volunteer2_name: "",
       volunteer2_id: "",
       volunteer2_type: "execom",
+      certificate_drive_link: "",
+      certificate_template_url: "",
+      certificate_enabled: true,
       created_by: user?.full_name || user?.email || "ExeCom Coordinator",
       created_by_id: user?.id || null,
     });
@@ -867,6 +992,9 @@ export const ExecomDashboard: React.FC = () => {
       volunteer2_name: evt.volunteer2_name || (foundV2 ? foundV2.full_name : ""),
       volunteer2_id: evt.volunteer2_id || (foundV2 ? foundV2.id : ""),
       volunteer2_type: foundV2 || !evt.volunteer2_name ? "execom" : "external",
+      certificate_drive_link: evt.certificate_drive_link || "",
+      certificate_template_url: evt.certificate_template_url || "",
+      certificate_enabled: evt.certificate_enabled ?? true,
       created_by: evt.created_by || user?.full_name || user?.email || "",
       created_by_id: evt.created_by_id || user?.id || null,
     });
@@ -987,11 +1115,11 @@ export const ExecomDashboard: React.FC = () => {
   const departments = Array.from(new Set(execomMembers.map((m) => m.department))).filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 antialiased selection:bg-emerald-100 selection:text-emerald-900 flex flex-col w-full max-w-full overflow-x-hidden">
+    <div className="h-screen h-[100dvh] bg-[#f8fafc] text-slate-800 antialiased selection:bg-emerald-100 selection:text-emerald-900 flex flex-col w-full max-w-full overflow-hidden">
       {/* ------------------------------------------------------------------ */}
-      {/* TOP HEADER BAR */}
+      {/* TOP HEADER BAR (Static - Pinned to top) */}
       {/* ------------------------------------------------------------------ */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-xs w-full max-w-full">
+      <header className="shrink-0 sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-xs w-full max-w-full select-none">
         <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand & Portal Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -1170,9 +1298,10 @@ export const ExecomDashboard: React.FC = () => {
       </header>
 
       {/* ------------------------------------------------------------------ */}
-      {/* MAIN CONTENT AREA */}
+      {/* MAIN CONTENT AREA (Scrolls smoothly while top header stays static) */}
       {/* ------------------------------------------------------------------ */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-6 overflow-x-hidden">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden w-full">
+        <main className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-6 overflow-x-hidden">
         {/* Welcome Callout Banner */}
         <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -1987,8 +2116,74 @@ export const ExecomDashboard: React.FC = () => {
                     <Download className="w-3.5 h-3.5" />
                     <span>Export CSV</span>
                   </Button>
+
+                  {(() => {
+                    const curEvt = events.find((e) => e.id === selectedParticipantEventId);
+                    if (!curEvt) return null;
+                    const attendedCount = participantRegistrations.filter((r) => r.checked_in).length;
+
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAttendeesEvent(curEvt)}
+                          className="h-9 px-3 text-xs font-bold gap-1.5 border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100"
+                          title="Generate certificates for attended participants"
+                        >
+                          <Award className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Certificates ({attendedCount})</span>
+                        </Button>
+
+                        {curEvt.certificate_drive_link && (
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="h-9 px-3 text-xs font-bold gap-1.5 border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+                          >
+                            <a
+                              href={curEvt.certificate_drive_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open Coordinator Edit-Enabled Google Drive Link"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Google Drive</span>
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
+
+              {/* Action Feedback Banner */}
+              {participantAlert && (
+                <div
+                  className={`p-2.5 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 ${
+                    participantAlert.type === "success"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : "bg-rose-50 text-rose-800 border border-rose-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    {participantAlert.type === "success" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    )}
+                    <span>{participantAlert.text}</span>
+                  </div>
+                  <button
+                    onClick={() => setParticipantAlert(null)}
+                    className="text-[11px] underline opacity-80 hover:opacity-100"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
 
               {/* Summary KPI Strip */}
               {(() => {
@@ -2123,8 +2318,9 @@ export const ExecomDashboard: React.FC = () => {
                             <th className="py-3 px-4">Student</th>
                             <th className="py-3 px-4">Class / Branch</th>
                             <th className="py-3 px-4">Status</th>
+                            <th className="py-3 px-4">Email Pass</th>
                             <th className="py-3 px-4">Check-in Time</th>
-                            <th className="py-3 px-4 text-right">Attendance Action</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -2186,35 +2382,105 @@ export const ExecomDashboard: React.FC = () => {
                                 )}
                               </td>
 
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-1.5">
+                                  {reg.email_status === "sent" ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                      <Check className="w-3 h-3 text-emerald-600" />
+                                      <span>Sent</span>
+                                    </span>
+                                  ) : reg.email_status === "failed" ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200"
+                                      title={reg.email_error || "Email delivery failed"}
+                                    >
+                                      <XCircle className="w-3 h-3 text-rose-600" />
+                                      <span>Failed</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                      <Clock className="w-3 h-3 text-amber-600" />
+                                      <span>Pending</span>
+                                    </span>
+                                  )}
+
+                                  <button
+                                    onClick={() => handleResendParticipantEmail(reg)}
+                                    disabled={resendingEmailId === reg.id}
+                                    className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                    title="Resend Ticket Email"
+                                  >
+                                    {resendingEmailId === reg.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                                    ) : (
+                                      <Send className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                              </td>
+
                               <td className="py-3 px-4 text-slate-500 text-[11px]">
                                 {reg.checked_in_at ? new Date(reg.checked_in_at).toLocaleTimeString() : "—"}
                               </td>
 
                               <td className="py-3 px-4 text-right">
-                                <Button
-                                  size="sm"
-                                  disabled={togglingAttendanceId === reg.id}
-                                  onClick={() => handleToggleAttendance(reg)}
-                                  className={`h-7 px-2.5 text-xs font-bold ${
-                                    reg.checked_in
-                                      ? "bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200"
-                                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
-                                  }`}
-                                >
-                                  {togglingAttendanceId === reg.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : reg.checked_in ? (
-                                    <>
-                                      <UserX className="w-3 h-3 mr-1" />
-                                      <span>Mark Absent</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <UserCheck className="w-3 h-3 mr-1" />
-                                      <span>Mark Present</span>
-                                    </>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {/* Download PDF Ticket */}
+                                  <button
+                                    onClick={() => handleDownloadSingleTicket(reg)}
+                                    disabled={downloadingTicketId === reg.id}
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                                    title="Download PDF Ticket"
+                                  >
+                                    {downloadingTicketId === reg.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-600" />
+                                    ) : (
+                                      <Download className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+
+                                  {/* Certificate Download (Only for checked-in participants) */}
+                                  {reg.checked_in && (
+                                    <button
+                                      onClick={() => handleDownloadSingleCert(reg)}
+                                      disabled={generatingCertId === reg.id}
+                                      className="p-1.5 rounded-lg text-amber-600 hover:text-amber-800 hover:bg-amber-50"
+                                      title="Download Attendance Certificate (Attended Only)"
+                                    >
+                                      {generatingCertId === reg.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                      ) : (
+                                        <Award className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
                                   )}
-                                </Button>
+
+                                  {/* Manual Attendance Toggle */}
+                                  <Button
+                                    size="sm"
+                                    disabled={togglingAttendanceId === reg.id}
+                                    onClick={() => handleToggleAttendance(reg)}
+                                    className={`h-7 px-2 text-xs font-bold ${
+                                      reg.checked_in
+                                        ? "bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200"
+                                        : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                                    }`}
+                                  >
+                                    {togglingAttendanceId === reg.id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : reg.checked_in ? (
+                                      <>
+                                        <UserX className="w-3 h-3 mr-1" />
+                                        <span>Absent</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <UserCheck className="w-3 h-3 mr-1" />
+                                        <span>Present</span>
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -2446,7 +2712,8 @@ export const ExecomDashboard: React.FC = () => {
             )}
           </div>
         )}
-      </main>
+        </main>
+      </div>
 
       {/* ------------------------------------------------------------------ */}
       {/* MODAL: CREATE / EDIT EVENT */}
@@ -3022,6 +3289,50 @@ export const ExecomDashboard: React.FC = () => {
                   }
                 />
               )}
+            </div>
+
+            {/* Certificate & Google Drive Folder Configuration */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <Award className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold text-slate-800">
+                  Participation Certificates & Google Drive
+                </h4>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Coordinator Edit-Enabled Google Drive Link
+                </label>
+                <Input
+                  placeholder="https://drive.google.com/drive/folders/..."
+                  value={eventForm.certificate_drive_link}
+                  onChange={(e) =>
+                    setEventForm({ ...eventForm, certificate_drive_link: e.target.value })
+                  }
+                  className="h-9 text-xs rounded-xl bg-white"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Provide an edit-enabled Google Drive link so certificates for attended participants can be organized and shared.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Custom Certificate Background Template URL (Optional)
+                </label>
+                <Input
+                  placeholder="https://... (or leave blank for official FOSS template)"
+                  value={eventForm.certificate_template_url}
+                  onChange={(e) =>
+                    setEventForm({ ...eventForm, certificate_template_url: e.target.value })
+                  }
+                  className="h-9 text-xs rounded-xl bg-white"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Leave blank to use the built-in FOSS United Students Chapter official certificate design.
+                </p>
+              </div>
             </div>
 
             <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">

@@ -1800,7 +1800,7 @@ CREATE POLICY "Staff can delete event registrations"
   ON public.event_registrations FOR DELETE
   USING (true);
 
--- Ensure public.events has dual coordinator and volunteer columns
+-- Ensure public.events has dual coordinator, volunteer and certificate columns
 ALTER TABLE public.events
   ADD COLUMN IF NOT EXISTS coordinator1_name TEXT,
   ADD COLUMN IF NOT EXISTS coordinator1_id TEXT,
@@ -1813,7 +1813,23 @@ ALTER TABLE public.events
   ADD COLUMN IF NOT EXISTS volunteer1_phone TEXT,
   ADD COLUMN IF NOT EXISTS volunteer2_name TEXT,
   ADD COLUMN IF NOT EXISTS volunteer2_id TEXT,
-  ADD COLUMN IF NOT EXISTS volunteer2_phone TEXT;
+  ADD COLUMN IF NOT EXISTS volunteer2_phone TEXT,
+  ADD COLUMN IF NOT EXISTS certificate_template_url TEXT,
+  ADD COLUMN IF NOT EXISTS certificate_drive_link TEXT,
+  ADD COLUMN IF NOT EXISTS certificate_enabled BOOLEAN DEFAULT TRUE;
+
+-- Add email delivery tracking & certificate tracking to event_registrations
+ALTER TABLE public.event_registrations
+  ADD COLUMN IF NOT EXISTS email_status TEXT DEFAULT 'pending',
+  ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS email_error TEXT,
+  ADD COLUMN IF NOT EXISTS certificate_issued BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS certificate_issued_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS certificate_id TEXT;
+
+-- Prevent duplicate registrations for the same event with same email
+CREATE UNIQUE INDEX IF NOT EXISTS idx_event_reg_unique_email
+  ON public.event_registrations (event_id, LOWER(TRIM(email)));
 
 -- Reload Supabase PostgREST schema cache
 NOTIFY pgrst, 'reload schema';
