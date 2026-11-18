@@ -963,15 +963,14 @@ export const ExecomDashboard: React.FC = () => {
                   ExeCom Activity Calendar
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Plan, coordinate, and review campus workshops, coding sessions, meetings, and hackathons.
+                  View scheduled campus workshops, coding sessions, meetings, and hackathons (Read-Only).
                 </p>
               </div>
             </div>
 
             <ActivityCalendar
-              readOnly={false}
-              canManage={true}
-              onActivityChange={loadData}
+              readOnly={true}
+              canManage={false}
             />
           </div>
         )}

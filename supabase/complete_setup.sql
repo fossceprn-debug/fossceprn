@@ -749,7 +749,10 @@ WHERE email IN (
 -- ============================================================================
 ALTER TABLE public.execom_members 
   ADD COLUMN IF NOT EXISTS email TEXT,
-  ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'editor',
+  ADD COLUMN IF NOT EXISTS login_password TEXT,
+  ADD COLUMN IF NOT EXISTS phone_number TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_execom_email ON public.execom_members(email);
 CREATE INDEX IF NOT EXISTS idx_execom_user_id ON public.execom_members(user_id);
@@ -977,11 +980,25 @@ BEGIN
     v_full_name := 'ExeCom Coordinator';
   END IF;
 
-  UPDATE public.execom_members
-  SET email = v_clean_email,
-      login_password = p_password,
-      role = v_clean_role
-  WHERE id = p_execom_id;
+  -- 1. Safely update execom_members
+  BEGIN
+    UPDATE public.execom_members
+    SET email = v_clean_email,
+        login_password = p_password,
+        role = v_clean_role
+    WHERE id = p_execom_id;
+  EXCEPTION WHEN OTHERS THEN
+    BEGIN
+      UPDATE public.execom_members
+      SET email = v_clean_email,
+          role = v_clean_role
+      WHERE id = p_execom_id;
+    EXCEPTION WHEN OTHERS THEN
+      UPDATE public.execom_members
+      SET email = v_clean_email
+      WHERE id = p_execom_id;
+    END;
+  END;
 
   v_encrypted_pwd := crypt(p_password, gen_salt('bf', 10));
 
@@ -1001,15 +1018,17 @@ BEGIN
       '', '', '', ''
     );
 
-    INSERT INTO auth.identities (
-      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
-    ) VALUES (
-      v_user_id, v_user_id,
-      format('{"sub":"%s","email":"%s"}', v_user_id::text, v_clean_email)::jsonb,
-      'email', v_user_id::text, NOW(), NOW(), NOW()
-    )
-    ON CONFLICT (id) DO UPDATE
-    SET identity_data = EXCLUDED.identity_data, updated_at = NOW();
+    BEGIN
+      INSERT INTO auth.identities (
+        id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+      ) VALUES (
+        v_user_id, v_user_id,
+        format('{"sub":"%s","email":"%s"}', v_user_id::text, v_clean_email)::jsonb,
+        'email', v_user_id::text, NOW(), NOW(), NOW()
+      );
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
   ELSE
     UPDATE auth.users
     SET encrypted_password = v_encrypted_pwd,
@@ -1022,29 +1041,49 @@ BEGIN
         updated_at = NOW()
     WHERE id = v_user_id;
 
-    INSERT INTO auth.identities (
-      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
-    ) VALUES (
-      v_user_id, v_user_id,
-      format('{"sub":"%s","email":"%s"}', v_user_id::text, v_clean_email)::jsonb,
-      'email', v_user_id::text, NOW(), NOW(), NOW()
-    )
-    ON CONFLICT (id) DO UPDATE
-    SET identity_data = EXCLUDED.identity_data, updated_at = NOW();
+    BEGIN
+      INSERT INTO auth.identities (
+        id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+      ) VALUES (
+        v_user_id, v_user_id,
+        format('{"sub":"%s","email":"%s"}', v_user_id::text, v_clean_email)::jsonb,
+        'email', v_user_id::text, NOW(), NOW(), NOW()
+      );
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
   END IF;
 
-  UPDATE public.execom_members SET user_id = v_user_id WHERE id = p_execom_id;
+  BEGIN
+    UPDATE public.execom_members SET user_id = v_user_id WHERE id = p_execom_id;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
-  INSERT INTO public.user_roles (user_id, role)
-  VALUES (v_user_id, v_clean_role)
-  ON CONFLICT (user_id, role) DO NOTHING;
+  BEGIN
+    INSERT INTO public.user_roles (user_id, role)
+    VALUES (v_user_id, v_clean_role)
+    ON CONFLICT (user_id, role) DO UPDATE SET role = EXCLUDED.role;
+  EXCEPTION WHEN OTHERS THEN
+    BEGIN
+      INSERT INTO public.user_roles (user_id, role)
+      VALUES (v_user_id, 'editor')
+      ON CONFLICT DO NOTHING;
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+  END;
 
-  INSERT INTO public.profiles (id, email, full_name, membership_status)
-  VALUES (v_user_id, v_clean_email, v_full_name, 'active')
-  ON CONFLICT (id) DO UPDATE
-  SET full_name = EXCLUDED.full_name, email = EXCLUDED.email, updated_at = NOW();
+  BEGIN
+    INSERT INTO public.profiles (id, email, full_name, membership_status)
+    VALUES (v_user_id, v_clean_email, v_full_name, 'active')
+    ON CONFLICT (id) DO UPDATE
+    SET full_name = EXCLUDED.full_name, email = EXCLUDED.email, updated_at = NOW();
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
-  RETURN jsonb_build_object('success', true, 'user_id', v_user_id, 'email', v_clean_email);
+  RETURN jsonb_build_object('success', true, 'user_id', v_user_id, 'email', v_clean_email, 'role', v_clean_role);
 END;
 $$;
 
@@ -1361,39 +1400,30 @@ CREATE POLICY "Anyone can view published activities"
   );
 
 DROP POLICY IF EXISTS "Authorized coordinators and admins can insert activities" ON public.activities;
-CREATE POLICY "Authorized coordinators and admins can insert activities"
+DROP POLICY IF EXISTS "Only admins can insert activities" ON public.activities;
+CREATE POLICY "Only admins can insert activities"
   ON public.activities FOR INSERT
   WITH CHECK (
     public.is_admin()
-    OR EXISTS (
-      SELECT 1 FROM public.user_roles
-      WHERE user_id = auth.uid() AND role IN ('super_admin', 'admin', 'editor')
-    )
-    OR true
+    OR public.is_super_admin()
   );
 
 DROP POLICY IF EXISTS "Authorized coordinators and admins can update activities" ON public.activities;
-CREATE POLICY "Authorized coordinators and admins can update activities"
+DROP POLICY IF EXISTS "Only admins can update activities" ON public.activities;
+CREATE POLICY "Only admins can update activities"
   ON public.activities FOR UPDATE
   USING (
     public.is_admin()
-    OR EXISTS (
-      SELECT 1 FROM public.user_roles
-      WHERE user_id = auth.uid() AND role IN ('super_admin', 'admin', 'editor')
-    )
-    OR true
+    OR public.is_super_admin()
   );
 
 DROP POLICY IF EXISTS "Authorized coordinators and admins can delete activities" ON public.activities;
-CREATE POLICY "Authorized coordinators and admins can delete activities"
+DROP POLICY IF EXISTS "Only admins can delete activities" ON public.activities;
+CREATE POLICY "Only admins can delete activities"
   ON public.activities FOR DELETE
   USING (
     public.is_admin()
-    OR EXISTS (
-      SELECT 1 FROM public.user_roles
-      WHERE user_id = auth.uid() AND role IN ('super_admin', 'admin', 'editor')
-    )
-    OR true
+    OR public.is_super_admin()
   );
 
 -- Step 5: Activity Coordinators, Volunteers & Deadlines (20261101000016)

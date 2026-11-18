@@ -395,11 +395,18 @@ export const AdminExecom: React.FC = () => {
   const handleOpenCredentialsModal = (member: ExecomMember) => {
     setCredMember(member);
     const isAmal = member.full_name.toLowerCase().includes("amal");
+    const isFaculty =
+      member.role === "faculty" ||
+      (member.designation && (
+        member.designation.toLowerCase().includes("faculty") ||
+        member.designation.toLowerCase().includes("staff advisor")
+      ));
+
     const existingCred = member.email
       ? findAssignedCredential(member.email)
       : isAmal
       ? (findAssignedCredential("amaldev@fossceprn") || findAssignedCredential("amal"))
-      : undefined;
+      : (findAssignedCredential(member.full_name) || (member.id ? findAssignedCredential(member.id) : undefined));
 
     const cleanName = member.full_name.toLowerCase().replace(/[^a-z0-9]/g, "") || "coordinator";
     const suggestedEmail =
@@ -411,7 +418,7 @@ export const AdminExecom: React.FC = () => {
 
     setCredEmail(suggestedEmail);
     setCredPassword(existingCred?.password || generateSecurePassword());
-    setCredRole((existingCred?.role as AdminRole) || (member.role as AdminRole) || "editor");
+    setCredRole((existingCred?.role as AdminRole) || (isFaculty ? "faculty" : (member.role as AdminRole) || "editor"));
     setCredFeedback(null);
     setProvisionedRecord(null);
     setCopiedSuccess(false);
@@ -445,7 +452,27 @@ export const AdminExecom: React.FC = () => {
           type: "success",
           message: res.message,
         });
+
+        // Update local member state immediately so "Change Key" & role badge appear instantly
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.id === credMember.id
+              ? {
+                  ...m,
+                  email: credEmail,
+                  role: credRole,
+                  user_id: res.userId || m.user_id || m.id,
+                }
+              : m
+          )
+        );
+
         await loadAllData();
+      } else {
+        setCredFeedback({
+          type: "error",
+          message: res.message || "Failed to provision login credentials.",
+        });
       }
     } catch (err: any) {
       console.error("Provisioning error:", err);
@@ -460,12 +487,13 @@ export const AdminExecom: React.FC = () => {
 
   const handleCopyCredentials = () => {
     if (!provisionedRecord) return;
-    const text = `FOSS CEPrn — ExeCom Dashboard Credentials
+    const loginPath = provisionedRecord.role === "faculty" ? "/faculty/login" : "/execom/login";
+    const text = `FOSS CEPrn — ${provisionedRecord.role === "faculty" ? "Faculty Console" : "ExeCom Dashboard"} Credentials
 Name: ${provisionedRecord.fullName}
 Email / User ID: ${provisionedRecord.email}
 Password: ${provisionedRecord.password}
 Role: ${provisionedRecord.role.toUpperCase()}
-Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.origin}/login)`;
+Login URL: ${window.location.origin}${loginPath} (or ${window.location.origin}/admin/login)`;
 
     navigator.clipboard.writeText(text);
     setCopiedSuccess(true);
@@ -832,18 +860,46 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
 
                         {/* Dashboard Access Status */}
                         <td className="py-3 px-4">
-                          {member.user_id ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                <KeyRound className="w-3 h-3 text-emerald-600" />
-                                <span className="capitalize">{member.role || "Editor"}</span>
+                          {(() => {
+                            const assigned =
+                              (member.email ? findAssignedCredential(member.email) : undefined) ||
+                              findAssignedCredential(member.full_name) ||
+                              (member.id ? findAssignedCredential(member.id) : undefined);
+                            const isFaculty =
+                              member.role === "faculty" ||
+                              (member.designation && (
+                                member.designation.toLowerCase().includes("faculty") ||
+                                member.designation.toLowerCase().includes("staff advisor")
+                              ));
+                            const hasKey = Boolean(member.user_id || assigned?.password);
+                            const roleDisplay = assigned?.role || member.role || (isFaculty ? "faculty" : "editor");
+
+                            if (hasKey) {
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold border ${
+                                      roleDisplay === "faculty"
+                                        ? "bg-purple-50 text-purple-800 border-purple-200"
+                                        : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    }`}
+                                  >
+                                    <KeyRound
+                                      className={`w-3 h-3 ${
+                                        roleDisplay === "faculty" ? "text-purple-600" : "text-emerald-600"
+                                      }`}
+                                    />
+                                    <span className="capitalize">{roleDisplay}</span>
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 italic">
+                                <span>No Login Issued</span>
                               </span>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 italic">
-                              <span>No Login Issued</span>
-                            </span>
-                          )}
+                            );
+                          })()}
                         </td>
 
                         {/* Status Toggle */}
@@ -869,18 +925,28 @@ Dashboard URL: ${window.location.origin}/execom/login (or ${window.location.orig
                         <td className="py-3 px-4 text-right">
                           <div className="inline-flex items-center gap-1">
                             {/* Assign Credentials Button */}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenCredentialsModal(member)}
-                              className="h-8 px-2.5 text-xs font-semibold gap-1 text-slate-700 border-slate-200 hover:border-emerald-500 hover:text-emerald-700 hover:bg-emerald-50"
-                              title="Assign User ID and Password for ExeCom Login"
-                            >
-                              <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
-                              <span className="hidden sm:inline">
-                                {member.user_id ? "Change Key" : "Assign Key"}
-                              </span>
-                            </Button>
+                            {(() => {
+                              const assigned =
+                                (member.email ? findAssignedCredential(member.email) : undefined) ||
+                                findAssignedCredential(member.full_name) ||
+                                (member.id ? findAssignedCredential(member.id) : undefined);
+                              const hasKey = Boolean(member.user_id || assigned?.password);
+
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenCredentialsModal(member)}
+                                  className="h-8 px-2.5 text-xs font-semibold gap-1 text-slate-700 border-slate-200 hover:border-emerald-500 hover:text-emerald-700 hover:bg-emerald-50"
+                                  title="Assign User ID and Password for Login"
+                                >
+                                  <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span className="hidden sm:inline">
+                                    {hasKey ? "Change Key" : "Assign Key"}
+                                  </span>
+                                </Button>
+                              );
+                            })()}
 
                             <Button
                               variant="ghost"

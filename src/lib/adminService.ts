@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   saveAssignedCredential,
+  findAssignedCredential,
   getMembershipOpenStatus,
   normalizeEmail as credNormalizeEmail,
 } from "@/lib/credentialsService";
@@ -385,10 +386,31 @@ export async function getAllExecomAdmin(): Promise<ExecomMember[]> {
       }
     }
 
-    return (data as ExecomMember[]).map((m) => ({
-      ...m,
-      role: (m as any).role || (m.user_id ? roleMap.get(m.user_id) || "editor" : null),
-    }));
+    return (data as ExecomMember[]).map((m) => {
+      const assigned =
+        (m.email ? findAssignedCredential(m.email) : undefined) ||
+        findAssignedCredential(m.full_name) ||
+        (m.id ? findAssignedCredential(m.id) : undefined);
+
+      const isFaculty =
+        (m as any).role === "faculty" ||
+        (m.designation && (
+          m.designation.toLowerCase().includes("faculty") ||
+          m.designation.toLowerCase().includes("staff advisor")
+        ));
+
+      const finalRole =
+        (m as any).role ||
+        assigned?.role ||
+        (m.user_id ? roleMap.get(m.user_id) : undefined) ||
+        (isFaculty ? "faculty" : "editor");
+
+      return {
+        ...m,
+        user_id: m.user_id || (assigned?.password ? m.id : null),
+        role: finalRole,
+      };
+    });
   } catch (err) {
     console.warn("Exception fetching execom members:", err);
     return [];
