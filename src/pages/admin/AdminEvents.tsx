@@ -15,6 +15,10 @@ import {
   CheckCircle,
   Clock,
   MapPin,
+  Users,
+  QrCode,
+  FileText,
+  Link2,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,7 +40,15 @@ import {
   uploadStorageFile,
 } from "@/lib/adminService";
 import { formatDate } from "@/lib/utils";
-import type { EventItem, PublicationStatus, RegistrationStatus } from "@/types";
+import { EventRegistrationQuestionsBuilder } from "@/components/events/EventRegistrationQuestionsBuilder";
+import { EventAttendeesModal } from "@/components/events/EventAttendeesModal";
+import type {
+  EventItem,
+  PublicationStatus,
+  RegistrationStatus,
+  RegistrationMode,
+  RegistrationQuestion,
+} from "@/types";
 
 export const AdminEvents: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -51,6 +63,7 @@ export const AdminEvents: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [attendeesEvent, setAttendeesEvent] = useState<EventItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -66,6 +79,9 @@ export const AdminEvents: React.FC = () => {
     cover_image: "",
     registration_status: "upcoming" as RegistrationStatus,
     publication_status: "draft" as PublicationStatus,
+    registration_mode: "onsite" as RegistrationMode,
+    gform_url: "",
+    registration_questions: [] as RegistrationQuestion[],
   });
 
   const loadData = async () => {
@@ -103,6 +119,9 @@ export const AdminEvents: React.FC = () => {
       cover_image: "",
       registration_status: "upcoming",
       publication_status: "draft",
+      registration_mode: "onsite",
+      gform_url: "",
+      registration_questions: [],
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -120,6 +139,9 @@ export const AdminEvents: React.FC = () => {
       cover_image: evt.cover_image || "",
       registration_status: evt.registration_status,
       publication_status: evt.publication_status,
+      registration_mode: evt.registration_mode || "onsite",
+      gform_url: evt.gform_url || "",
+      registration_questions: evt.registration_questions || [],
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -319,18 +341,31 @@ export const AdminEvents: React.FC = () => {
 
                     {/* Registration */}
                     <td className="py-3 px-4">
-                      <Badge
-                        variant={
-                          evt.registration_status === "open"
-                            ? "statusOpen"
-                            : evt.registration_status === "upcoming"
-                            ? "accent"
-                            : "statusClosed"
-                        }
-                        className="text-[10px]"
-                      >
-                        {evt.registration_status.replace("_", " ").toUpperCase()}
-                      </Badge>
+                      <div className="flex flex-col gap-1 items-start">
+                        <Badge
+                          variant={
+                            evt.registration_status === "open"
+                              ? "statusOpen"
+                              : evt.registration_status === "upcoming"
+                              ? "accent"
+                              : "statusClosed"
+                          }
+                          className="text-[10px]"
+                        >
+                          {evt.registration_status.replace("_", " ").toUpperCase()}
+                        </Badge>
+                        {evt.registration_mode === "gform" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-semibold border border-blue-200">
+                            <Link2 className="w-2.5 h-2.5" />
+                            <span>G-Form</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded font-semibold border border-emerald-200">
+                            <QrCode className="w-2.5 h-2.5" />
+                            <span>On-site QR</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Publication Status */}
@@ -351,6 +386,15 @@ export const AdminEvents: React.FC = () => {
                     {/* Actions */}
                     <td className="py-3 px-4 text-right">
                       <div className="inline-flex items-center gap-1">
+                        {evt.registration_mode !== "gform" && (
+                          <button
+                            onClick={() => setAttendeesEvent(evt)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50"
+                            title="View Attendees & QR Check-In"
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <Button
                           asChild
                           variant="ghost"
@@ -570,6 +614,107 @@ export const AdminEvents: React.FC = () => {
               />
             </div>
 
+            {/* Registration Mode & Configuration */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <label className="block text-xs font-bold text-slate-800">
+                Registration Mode *
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div
+                  onClick={() => setFormData({ ...formData, registration_mode: "onsite" })}
+                  className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between space-y-1.5 ${
+                    formData.registration_mode === "onsite"
+                      ? "border-emerald-600 bg-emerald-50/40 text-emerald-900"
+                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <QrCode className="w-4 h-4 text-emerald-600" />
+                      <span>On-site Registration</span>
+                    </span>
+                    <input
+                      type="radio"
+                      name="admin_reg_mode"
+                      checked={formData.registration_mode === "onsite"}
+                      onChange={() => setFormData({ ...formData, registration_mode: "onsite" })}
+                      className="text-emerald-600"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-tight">
+                    Custom questions form with unique QR entry passes generated for check-in.
+                  </p>
+                </div>
+
+                <div
+                  onClick={() => setFormData({ ...formData, registration_mode: "gform" })}
+                  className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between space-y-1.5 ${
+                    formData.registration_mode === "gform"
+                      ? "border-blue-600 bg-blue-50/40 text-blue-900"
+                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <Link2 className="w-4 h-4 text-blue-600" />
+                      <span>Google Form</span>
+                    </span>
+                    <input
+                      type="radio"
+                      name="admin_reg_mode"
+                      checked={formData.registration_mode === "gform"}
+                      onChange={() => setFormData({ ...formData, registration_mode: "gform" })}
+                      className="text-blue-600"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-tight">
+                    External Google Form registration link button.
+                  </p>
+                </div>
+              </div>
+
+              {formData.registration_mode === "gform" ? (
+                <div className="p-3.5 rounded-2xl bg-blue-50/50 border border-blue-200 space-y-1.5">
+                  <label className="block text-xs font-bold text-blue-900">
+                    Google Form Link (URL) *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      required={formData.registration_mode === "gform"}
+                      placeholder="https://forms.gle/... or https://docs.google.com/forms/..."
+                      value={formData.gform_url}
+                      onChange={(e) => setFormData({ ...formData, gform_url: e.target.value })}
+                      className="h-9 text-xs rounded-xl bg-white border-blue-200 flex-1 font-mono"
+                    />
+                    {formData.gform_url && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        asChild
+                        className="h-9 text-xs gap-1 border-blue-300 text-blue-700 hover:bg-blue-100"
+                      >
+                        <a href={formData.gform_url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Test</span>
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-blue-700/80">
+                    Students will see a "Register via Google Form" button that directly opens this form in a new tab.
+                  </p>
+                </div>
+              ) : (
+                <EventRegistrationQuestionsBuilder
+                  questions={formData.registration_questions}
+                  onChange={(questions) =>
+                    setFormData({ ...formData, registration_questions: questions })
+                  }
+                />
+              )}
+            </div>
+
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <Button
                 type="button"
@@ -624,6 +769,13 @@ export const AdminEvents: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ATTENDEES & QR CHECK-IN DIALOG */}
+      <EventAttendeesModal
+        isOpen={Boolean(attendeesEvent)}
+        onClose={() => setAttendeesEvent(null)}
+        event={attendeesEvent}
+      />
     </AdminLayout>
   );
 };

@@ -7,6 +7,9 @@ import {
   ArrowRight,
   Filter,
   CalendarDays,
+  ExternalLink,
+  QrCode,
+  Link2,
 } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -180,7 +183,7 @@ export const Events: React.FC = () => {
                           alt={evt.title}
                           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
-                        <div className="absolute top-3 left-3">
+                        <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
                           <Badge
                             variant={
                               evt.registration_status === "open"
@@ -192,12 +195,23 @@ export const Events: React.FC = () => {
                           >
                             {evt.registration_status.replace("_", " ").toUpperCase()}
                           </Badge>
+                          {evt.registration_mode === "gform" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-full shadow-xs border border-blue-200">
+                              <Link2 className="w-2.5 h-2.5" />
+                              <span>G-Form</span>
+                            </span>
+                          ) : evt.registration_status === "open" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-full shadow-xs border border-emerald-200">
+                              <QrCode className="w-2.5 h-2.5" />
+                              <span>QR Pass</span>
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                     ) : (
                       <div className="relative h-32 w-full bg-foss-lightBg flex items-center justify-center border-b border-border">
                         <CalendarDays className="w-8 h-8 text-foss-green/40" />
-                        <div className="absolute top-3 left-3">
+                        <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
                           <Badge
                             variant={
                               evt.registration_status === "open"
@@ -209,6 +223,17 @@ export const Events: React.FC = () => {
                           >
                             {evt.registration_status.replace("_", " ").toUpperCase()}
                           </Badge>
+                          {evt.registration_mode === "gform" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-full shadow-xs border border-blue-200">
+                              <Link2 className="w-2.5 h-2.5" />
+                              <span>G-Form</span>
+                            </span>
+                          ) : evt.registration_status === "open" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full shadow-xs border border-emerald-200">
+                              <QrCode className="w-2.5 h-2.5" />
+                              <span>QR Pass</span>
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                     )}
@@ -237,10 +262,22 @@ export const Events: React.FC = () => {
                     </CardContent>
                   </div>
 
-                  <div className="p-6 pt-0 border-t border-border/60 flex items-center justify-between">
-                    <span className="text-[11px] text-foss-gray font-medium">
-                      CE Perumon Campus
-                    </span>
+                  <div className="p-6 pt-0 border-t border-border/60 flex items-center justify-between gap-2">
+                    {evt.registration_mode === "gform" && evt.gform_url && evt.registration_status === "open" ? (
+                      <a
+                        href={evt.gform_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors"
+                      >
+                        <span>Register (G-Form)</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-foss-gray font-medium">
+                        CE Perumon Campus
+                      </span>
+                    )}
                     <Button
                       asChild
                       variant="ghost"

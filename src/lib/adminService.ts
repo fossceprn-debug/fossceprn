@@ -20,6 +20,9 @@ import type {
   ExecomApplicationStatus,
   MemberApplication,
   MemberApplicationStatus,
+  RegistrationMode,
+  RegistrationQuestion,
+  EventRegistration,
 } from "@/types";
 
 // ----------------------------------------------------------------------------
@@ -778,6 +781,9 @@ export async function createEventAdmin(event: Partial<EventItem>): Promise<Event
     end_date: event.end_date || new Date().toISOString(),
     registration_status: event.registration_status || "upcoming",
     publication_status: event.publication_status || "published",
+    registration_mode: event.registration_mode || "onsite",
+    gform_url: event.gform_url || null,
+    registration_questions: event.registration_questions || [],
     created_at: new Date().toISOString(),
   };
 
@@ -798,6 +804,9 @@ export async function createEventAdmin(event: Partial<EventItem>): Promise<Event
             end_date: newEvent.end_date,
             registration_status: newEvent.registration_status,
             publication_status: newEvent.publication_status,
+            registration_mode: newEvent.registration_mode,
+            gform_url: newEvent.gform_url,
+            registration_questions: newEvent.registration_questions,
           },
         ])
         .select()
@@ -879,6 +888,183 @@ export async function deleteEventAdmin(id: string): Promise<void> {
   const cached = getStoredEvents();
   saveStoredEvents(cached.filter((e) => e.id !== id));
   logActivity("Deleted Event", "event", id).catch(() => {});
+}
+
+// ----------------------------------------------------------------------------
+// 5.1 EVENT REGISTRATIONS & TICKETS (ON-SITE REGISTRATIONS & QR CHECK-IN)
+// ----------------------------------------------------------------------------
+const EVENT_REGISTRATIONS_STORAGE_KEY = "foss_event_registrations_v1";
+
+function getStoredEventRegistrations(): EventRegistration[] {
+  try {
+    const raw = localStorage.getItem(EVENT_REGISTRATIONS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredEventRegistrations(list: EventRegistration[]) {
+  try {
+    localStorage.setItem(EVENT_REGISTRATIONS_STORAGE_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+export function generateTicketCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let randomPart = "";
+  for (let i = 0; i < 6; i++) {
+    randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `CEPRN-${randomPart}`;
+}
+
+export async function registerForEvent(payload: {
+  event_id: string;
+  full_name: string;
+  email: string;
+  phone?: string | null;
+  class_semester?: string | null;
+  responses?: Record<string, any>;
+}): Promise<{ registration: EventRegistration; error?: string }> {
+  const ticketCode = generateTicketCode();
+  const newRegistration: EventRegistration = {
+    id: crypto.randomUUID(),
+    event_id: payload.event_id,
+    full_name: payload.full_name.trim(),
+    email: payload.email.trim().toLowerCase(),
+    phone: payload.phone?.trim() || null,
+    class_semester: payload.class_semester?.trim() || null,
+    responses: payload.responses || {},
+    ticket_code: ticketCode,
+    checked_in: false,
+    checked_in_at: null,
+    created_at: new Date().toISOString(),
+  };
+
+  let savedRegistration = newRegistration;
+
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from("event_registrations")
+        .insert([
+          {
+            event_id: newRegistration.event_id,
+            full_name: newRegistration.full_name,
+            email: newRegistration.email,
+            phone: newRegistration.phone,
+            class_semester: newRegistration.class_semester,
+            responses: newRegistration.responses,
+            ticket_code: newRegistration.ticket_code,
+            checked_in: false,
+          },
+        ])
+        .select()
+        .single();
+
+      if (!error && data) {
+        savedRegistration = data as EventRegistration;
+      } else if (error) {
+        console.warn("Supabase event registration failed, falling back to local:", error.message);
+      }
+    } catch (err: any) {
+      console.warn("Exception during event registration insert:", err);
+    }
+  }
+
+  // Update local storage
+  const cached = getStoredEventRegistrations();
+  saveStoredEventRegistrations([savedRegistration, ...cached]);
+
+  return { registration: savedRegistration };
+}
+
+export async function getEventRegistrations(eventId: string): Promise<EventRegistration[]> {
+  let list: EventRegistration[] = [];
+
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from("event_registrations")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        list = data as EventRegistration[];
+      }
+    } catch (err) {
+      console.warn("Error fetching registrations from Supabase:", err);
+    }
+  }
+
+  const cached = getStoredEventRegistrations().filter((r) => r.event_id === eventId);
+  if (list.length === 0) {
+    list = cached;
+  } else {
+    const existingIds = new Set(list.map((r) => r.id));
+    for (const item of cached) {
+      if (!existingIds.has(item.id)) {
+        list.push(item);
+      }
+    }
+  }
+
+  return list;
+}
+
+export async function checkInAttendee(
+  ticketCodeOrId: string,
+  eventId?: string
+): Promise<{ success: boolean; registration?: EventRegistration; error?: string }> {
+  const code = ticketCodeOrId.trim();
+  const now = new Date().toISOString();
+
+  if (isSupabaseConfigured) {
+    try {
+      let query = supabase
+        .from("event_registrations")
+        .update({ checked_in: true, checked_in_at: now });
+
+      if (code.startsWith("CEPRN-") || code.length <= 16) {
+        query = query.ilike("ticket_code", code);
+      } else {
+        query = query.eq("id", code);
+      }
+
+      if (eventId) {
+        query = query.eq("event_id", eventId);
+      }
+
+      const { data, error } = await query.select().single();
+      if (!error && data) {
+        const cached = getStoredEventRegistrations();
+        saveStoredEventRegistrations(
+          cached.map((r) => (r.id === data.id ? (data as EventRegistration) : r))
+        );
+        return { success: true, registration: data as EventRegistration };
+      }
+    } catch (err: any) {
+      console.warn("Supabase check-in error:", err);
+    }
+  }
+
+  const cached = getStoredEventRegistrations();
+  const foundIndex = cached.findIndex(
+    (r) =>
+      (r.ticket_code.toLowerCase() === code.toLowerCase() || r.id === code) &&
+      (!eventId || r.event_id === eventId)
+  );
+
+  if (foundIndex >= 0) {
+    cached[foundIndex].checked_in = true;
+    cached[foundIndex].checked_in_at = now;
+    saveStoredEventRegistrations(cached);
+    return { success: true, registration: cached[foundIndex] };
+  }
+
+  return { success: false, error: "Registration not found with ticket code: " + code };
 }
 
 // ----------------------------------------------------------------------------

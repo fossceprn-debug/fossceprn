@@ -24,6 +24,8 @@ import {
   Eye,
   CalendarDays,
   ChevronRight,
+  QrCode,
+  Link2,
 } from "lucide-react";
 import { useAuth } from "@/lib/authContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,12 +55,16 @@ import {
 } from "@/lib/activityService";
 import { ActivityCalendar, getCategoryBadgeClasses } from "@/components/calendar/ActivityCalendar";
 import { formatDate } from "@/lib/utils";
+import { EventRegistrationQuestionsBuilder } from "@/components/events/EventRegistrationQuestionsBuilder";
+import { EventAttendeesModal } from "@/components/events/EventAttendeesModal";
 import type {
   EventItem,
   ExecomMember,
   AnnouncementItem,
   PublicationStatus,
   RegistrationStatus,
+  RegistrationMode,
+  RegistrationQuestion,
   ActivityItem,
 } from "@/types";
 
@@ -112,6 +118,7 @@ export const ExecomDashboard: React.FC = () => {
   // Event Modal States (Creation & Editing)
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [attendeesEvent, setAttendeesEvent] = useState<EventItem | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
   const [uploadingPoster, setUploadingPoster] = useState(false);
   const [eventError, setEventError] = useState("");
@@ -126,6 +133,9 @@ export const ExecomDashboard: React.FC = () => {
     cover_image: "",
     publication_status: "published" as PublicationStatus,
     registration_status: "open" as RegistrationStatus,
+    registration_mode: "onsite" as RegistrationMode,
+    gform_url: "",
+    registration_questions: [] as RegistrationQuestion[],
   });
 
   const loadData = async () => {
@@ -193,6 +203,9 @@ export const ExecomDashboard: React.FC = () => {
       cover_image: "",
       publication_status: "published",
       registration_status: "open",
+      registration_mode: "onsite",
+      gform_url: "",
+      registration_questions: [],
     });
     setEventError("");
     setEventModalOpen(true);
@@ -210,6 +223,9 @@ export const ExecomDashboard: React.FC = () => {
       cover_image: evt.cover_image || "",
       publication_status: evt.publication_status,
       registration_status: evt.registration_status,
+      registration_mode: evt.registration_mode || "onsite",
+      gform_url: evt.gform_url || "",
+      registration_questions: evt.registration_questions || [],
     });
     setEventError("");
     setEventModalOpen(true);
@@ -919,9 +935,33 @@ export const ExecomDashboard: React.FC = () => {
                         >
                           Registration: {evt.registration_status}
                         </Badge>
+                        {evt.registration_mode === "gform" ? (
+                          <span className="inline-flex items-center gap-1 text-[9px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-bold border border-blue-200">
+                            <Link2 className="w-2.5 h-2.5" />
+                            <span>G-Form</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[9px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200">
+                            <QrCode className="w-2.5 h-2.5" />
+                            <span>On-site QR</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5">
+                        {evt.registration_mode !== "gform" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setAttendeesEvent(evt)}
+                            className="h-7 px-2 text-xs font-bold text-slate-700 border-slate-200 hover:bg-slate-50"
+                            title="View registered attendees & check-in"
+                          >
+                            <Users className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                            <span>Attendees</span>
+                          </Button>
+                        )}
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1330,6 +1370,107 @@ export const ExecomDashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Registration Mode & Configuration */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <label className="block text-xs font-bold text-slate-800">
+                Registration Mode *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div
+                  onClick={() => setEventForm({ ...eventForm, registration_mode: "onsite" })}
+                  className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between space-y-1.5 ${
+                    eventForm.registration_mode === "onsite"
+                      ? "border-emerald-600 bg-emerald-50/40 text-emerald-900"
+                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <QrCode className="w-4 h-4 text-emerald-600" />
+                      <span>On-site Registration</span>
+                    </span>
+                    <input
+                      type="radio"
+                      name="execom_reg_mode"
+                      checked={eventForm.registration_mode === "onsite"}
+                      onChange={() => setEventForm({ ...eventForm, registration_mode: "onsite" })}
+                      className="text-emerald-600"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-tight">
+                    Custom questions form with unique QR entry passes generated for check-in.
+                  </p>
+                </div>
+
+                <div
+                  onClick={() => setEventForm({ ...eventForm, registration_mode: "gform" })}
+                  className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between space-y-1.5 ${
+                    eventForm.registration_mode === "gform"
+                      ? "border-blue-600 bg-blue-50/40 text-blue-900"
+                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <Link2 className="w-4 h-4 text-blue-600" />
+                      <span>Google Form</span>
+                    </span>
+                    <input
+                      type="radio"
+                      name="execom_reg_mode"
+                      checked={eventForm.registration_mode === "gform"}
+                      onChange={() => setEventForm({ ...eventForm, registration_mode: "gform" })}
+                      className="text-blue-600"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-tight">
+                    External Google Form registration link button.
+                  </p>
+                </div>
+              </div>
+
+              {eventForm.registration_mode === "gform" ? (
+                <div className="p-3.5 rounded-2xl bg-blue-50/50 border border-blue-200 space-y-1.5">
+                  <label className="block text-xs font-bold text-blue-900">
+                    Google Form Link (URL) *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      required={eventForm.registration_mode === "gform"}
+                      placeholder="https://forms.gle/... or https://docs.google.com/forms/..."
+                      value={eventForm.gform_url}
+                      onChange={(e) => setEventForm({ ...eventForm, gform_url: e.target.value })}
+                      className="h-9 text-xs rounded-xl bg-white border-blue-200 flex-1 font-mono"
+                    />
+                    {eventForm.gform_url && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        asChild
+                        className="h-9 text-xs gap-1 border-blue-300 text-blue-700 hover:bg-blue-100"
+                      >
+                        <a href={eventForm.gform_url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Test</span>
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-blue-700/80">
+                    Students will see a "Register via Google Form" button that directly opens this form in a new tab.
+                  </p>
+                </div>
+              ) : (
+                <EventRegistrationQuestionsBuilder
+                  questions={eventForm.registration_questions}
+                  onChange={(questions) =>
+                    setEventForm({ ...eventForm, registration_questions: questions })
+                  }
+                />
+              )}
+            </div>
+
             <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
               <Button
                 type="button"
@@ -1358,6 +1499,13 @@ export const ExecomDashboard: React.FC = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ATTENDEES & CHECK-IN MODAL */}
+      <EventAttendeesModal
+        isOpen={Boolean(attendeesEvent)}
+        onClose={() => setAttendeesEvent(null)}
+        event={attendeesEvent}
+      />
     </div>
   );
 };

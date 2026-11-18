@@ -1,7 +1,36 @@
 export type PublicationStatus = "draft" | "published" | "archived";
 export type RegistrationStatus = "upcoming" | "open" | "closing_soon" | "closed" | "ended";
+export type RegistrationMode = "onsite" | "gform";
 export type AdminRole = "super_admin" | "admin" | "editor" | "viewer" | "faculty";
 export type MembershipStatus = "active" | "inactive" | "pending";
+
+export type QuestionType = "text" | "textarea" | "number" | "select" | "email" | "tel";
+
+export interface RegistrationQuestion {
+  id: string;
+  label: string;
+  type: QuestionType;
+  required: boolean;
+  placeholder?: string;
+  options?: string[];
+  help_text?: string;
+}
+
+export interface EventRegistration {
+  id: string;
+  event_id: string;
+  user_id?: string | null;
+  full_name: string;
+  email: string;
+  phone?: string | null;
+  class_semester?: string | null;
+  responses?: Record<string, any>;
+  ticket_code: string;
+  checked_in: boolean;
+  checked_in_at?: string | null;
+  created_at: string;
+  event_title?: string;
+}
 
 export interface Profile {
   id: string;
@@ -49,6 +78,9 @@ export interface EventItem {
   end_date: string | null;
   registration_status: RegistrationStatus;
   publication_status: PublicationStatus;
+  registration_mode?: RegistrationMode;
+  gform_url?: string | null;
+  registration_questions?: RegistrationQuestion[] | null;
   created_at: string;
 }
 

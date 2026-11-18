@@ -1722,6 +1722,57 @@ END $$;
 NOTIFY pgrst, 'reload schema';
 
 -- ============================================================================
+-- 15. EVENT REGISTRATION MODES & ON-SITE QR CHECK-IN ATTENDANCE
+-- ============================================================================
+
+ALTER TABLE public.events
+  ADD COLUMN IF NOT EXISTS registration_mode TEXT DEFAULT 'onsite' CHECK (registration_mode IN ('onsite', 'gform')),
+  ADD COLUMN IF NOT EXISTS gform_url TEXT,
+  ADD COLUMN IF NOT EXISTS registration_questions JSONB DEFAULT '[]'::jsonb;
+
+CREATE TABLE IF NOT EXISTS public.event_registrations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  class_semester TEXT,
+  responses JSONB DEFAULT '{}'::jsonb,
+  ticket_code TEXT NOT NULL UNIQUE,
+  checked_in BOOLEAN DEFAULT FALSE,
+  checked_in_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_reg_event_id ON public.event_registrations(event_id);
+CREATE INDEX IF NOT EXISTS idx_event_reg_ticket_code ON public.event_registrations(ticket_code);
+CREATE INDEX IF NOT EXISTS idx_event_reg_email ON public.event_registrations(email);
+
+ALTER TABLE public.event_registrations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public can register for events" ON public.event_registrations;
+CREATE POLICY "Public can register for events"
+  ON public.event_registrations FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Anyone can view registrations or ticket" ON public.event_registrations;
+CREATE POLICY "Anyone can view registrations or ticket"
+  ON public.event_registrations FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Staff can update event check-in status" ON public.event_registrations;
+CREATE POLICY "Staff can update event check-in status"
+  ON public.event_registrations FOR UPDATE
+  USING (true)
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Staff can delete event registrations" ON public.event_registrations;
+CREATE POLICY "Staff can delete event registrations"
+  ON public.event_registrations FOR DELETE
+  USING (true);
+
+-- ============================================================================
 -- END OF SETUP
 -- All ExeCom coordinators, events, and members are managed dynamically via
 -- the Super Admin console (/admin) with live password provisioning.

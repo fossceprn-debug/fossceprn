@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   CalendarDays,
   ExternalLink,
+  Ticket,
+  QrCode,
+  Sparkles,
 } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Button } from "@/components/ui/button";
@@ -17,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import { getEventBySlugOrId } from "@/lib/supabase";
+import { EventRegistrationModal } from "@/components/events/EventRegistrationModal";
 import type { EventItem } from "@/types";
 
 export const EventDetails: React.FC = () => {
@@ -24,6 +28,7 @@ export const EventDetails: React.FC = () => {
   const [event, setEvent] = useState<EventItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [isRegModalOpen, setIsRegModalOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -203,16 +208,51 @@ export const EventDetails: React.FC = () => {
                   </div>
 
                   {event.registration_status === "open" && (
-                    <Button asChild size="lg" className="w-full font-semibold">
-                      <Link to="/join">Register for this Event</Link>
-                    </Button>
+                    <>
+                      {event.registration_mode === "gform" && event.gform_url ? (
+                        <div className="space-y-2">
+                          <Button
+                            asChild
+                            size="lg"
+                            className="w-full font-bold bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-md rounded-xl"
+                          >
+                            <a
+                              href={event.gform_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <span>Register via Google Form</span>
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </Button>
+                          <p className="text-[11px] text-slate-500 text-center leading-tight">
+                            Opens external Google Form for attendee registration.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Button
+                            size="lg"
+                            onClick={() => setIsRegModalOpen(true)}
+                            className="w-full font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-md rounded-xl"
+                          >
+                            <Ticket className="w-4 h-4" />
+                            <span>Register for this Event</span>
+                          </Button>
+                          <p className="text-[11px] text-emerald-700/80 text-center leading-tight font-medium flex items-center justify-center gap-1">
+                            <QrCode className="w-3.5 h-3.5" />
+                            <span>Instant QR entry pass issued upon completion</span>
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleShare}
-                    className="w-full gap-2 text-xs"
+                    className="w-full gap-2 text-xs rounded-xl border-slate-200"
                   >
                     <Share2 className="w-3.5 h-3.5" />
                     <span>{copied ? "Link Copied to Clipboard!" : "Share Event"}</span>
@@ -223,6 +263,15 @@ export const EventDetails: React.FC = () => {
           </div>
         </div>
       </article>
+
+      {/* On-site Registration Modal with QR Ticket Pass */}
+      {event && (
+        <EventRegistrationModal
+          isOpen={isRegModalOpen}
+          onClose={() => setIsRegModalOpen(false)}
+          event={event}
+        />
+      )}
     </PageLayout>
   );
 };
