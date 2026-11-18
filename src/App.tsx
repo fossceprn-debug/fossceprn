@@ -19,6 +19,7 @@ import ExecomDashboard from "@/pages/execom/ExecomDashboard";
 import { ExecomProtectedRoute } from "@/components/execom/ExecomProtectedRoute";
 import { FacultyDashboard } from "@/pages/faculty/FacultyDashboard";
 import { FacultyProtectedRoute } from "@/components/faculty/FacultyProtectedRoute";
+import VerifyCertificate from "@/pages/VerifyCertificate";
 import NotFound from "@/pages/NotFound";
 
 // Admin Pages & Protected Route Gate
@@ -73,6 +74,8 @@ export function App() {
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/join" element={<Join />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/verify-certificate" element={<VerifyCertificate />} />
+            <Route path="/verify" element={<VerifyCertificate />} />
 
             {/* Admin, ExeCom & Faculty Authentication */}
             <Route path="/admin/login" element={<AdminLogin />} />
