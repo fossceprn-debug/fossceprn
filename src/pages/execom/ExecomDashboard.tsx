@@ -190,24 +190,49 @@ export const ExecomDashboard: React.FC = () => {
     registration_questions: [] as RegistrationQuestion[],
     coordinator_name: "",
     coordinator_phone: "",
+    coordinator1_name: "",
+    coordinator1_id: "",
+    coordinator1_phone: "",
+    coordinator2_name: "",
+    coordinator2_id: "",
+    coordinator2_phone: "",
+    coordinator2_type: "execom" as "execom" | "external",
+    volunteer1_name: "",
+    volunteer1_type: "execom" as "execom" | "external",
+    volunteer2_name: "",
+    volunteer2_type: "execom" as "execom" | "external",
     created_by: user?.full_name || user?.email || "ExeCom Coordinator",
     created_by_id: user?.id || null,
   });
 
-  const canManageEventAttendees = (evt: EventItem) => {
+  const canEditEvent = (evt: EventItem): boolean => {
     if (isAdmin) return true;
-    if (evt.created_by_id && user?.id && evt.created_by_id === user.id) return true;
-    if (evt.created_by && user?.email && evt.created_by.toLowerCase() === user.email.toLowerCase()) return true;
-    if (evt.coordinator_name && user?.full_name && evt.coordinator_name.toLowerCase().includes(user.full_name.toLowerCase())) return true;
+    if (!user) return false;
+
+    const userEmail = (user.email || "").toLowerCase().trim();
+    const userName = (user.full_name || "").toLowerCase().trim();
+    const userId = user.id;
+
+    // 1. Event Creator
+    if (evt.created_by_id && evt.created_by_id === userId) return true;
+    if (evt.created_by && (evt.created_by.toLowerCase().trim() === userEmail || evt.created_by.toLowerCase().trim() === userName)) return true;
+
+    // 2. Coordinator 1 (Must be ExeCom member)
+    if (evt.coordinator1_id && evt.coordinator1_id === userId) return true;
+    if (evt.coordinator1_name && (evt.coordinator1_name.toLowerCase().trim() === userName || evt.coordinator1_name.toLowerCase().trim() === userEmail)) return true;
+
+    // 3. Coordinator 2 (ExeCom or Non-ExeCom)
+    if (evt.coordinator2_id && evt.coordinator2_id === userId) return true;
+    if (evt.coordinator2_name && (evt.coordinator2_name.toLowerCase().trim() === userName || evt.coordinator2_name.toLowerCase().trim() === userEmail)) return true;
+
+    // Legacy fallback: coordinator_name contains userName
+    if (evt.coordinator_name && userName && evt.coordinator_name.toLowerCase().includes(userName)) return true;
+
     return false;
   };
 
-  const canEditEvent = (evt: EventItem) => {
-    if (isAdmin) return true;
-    if (evt.created_by_id && user?.id && evt.created_by_id === user.id) return true;
-    if (evt.created_by && user?.email && evt.created_by.toLowerCase() === user.email.toLowerCase()) return true;
-    if (evt.created_by && user?.full_name && evt.created_by.toLowerCase() === user.full_name.toLowerCase()) return true;
-    return false;
+  const canManageEventAttendees = (evt: EventItem): boolean => {
+    return canEditEvent(evt);
   };
 
   // --------------------------------------------------------------------------
@@ -457,7 +482,7 @@ export const ExecomDashboard: React.FC = () => {
     try {
       setEventsLoading(true);
       setMembersLoading(true);
-      const [eventsData, teamData, announceData, todayActs, upActs, allActs] = await Promise.all([
+      const [eventsData, teamData, announceData, upActs, allActs] = await Promise.all([
         getAllEventsAdmin().catch((e) => {
           console.warn("Failed loading events:", e);
           return [];
@@ -470,11 +495,7 @@ export const ExecomDashboard: React.FC = () => {
           console.warn("Failed loading announcements:", e);
           return [];
         }),
-        getTodayActivities().catch((e) => {
-          console.warn("Failed loading today activities:", e);
-          return [];
-        }),
-        getUpcomingActivities(5).catch((e) => {
+        getUpcomingActivities(8).catch((e) => {
           console.warn("Failed loading upcoming activities:", e);
           return [];
         }),
@@ -486,8 +507,8 @@ export const ExecomDashboard: React.FC = () => {
       setEvents(eventsData);
       setExecomMembers(teamData);
       setAnnouncements(announceData);
-      setTodayActivities(todayActs);
       setUpcomingActivities(upActs);
+      setUpcomingActivitiesCount(upActs.length);
 
       if (eventsData.length > 0) {
         const userEvent =
@@ -500,12 +521,6 @@ export const ExecomDashboard: React.FC = () => {
         setSelectedScanEventId((prev) => prev || userEvent.id);
         setSelectedParticipantEventId((prev) => prev || userEvent.id);
       }
-
-      const todayStr = new Date().toISOString().split("T")[0];
-      const count = allActs.filter(
-        (a) => a.activity_date >= todayStr && a.status === "published"
-      ).length;
-      setUpcomingActivitiesCount(count);
     } catch (err) {
       console.error("Error loading ExeCom dashboard data:", err);
     } finally {
@@ -520,6 +535,13 @@ export const ExecomDashboard: React.FC = () => {
 
   const handleOpenCreateEvent = () => {
     setEditingEvent(null);
+    const myMember = execomMembers.find(
+      (m) =>
+        (user?.id && m.id === user.id) ||
+        (user?.email && m.email && m.email.toLowerCase() === user.email.toLowerCase()) ||
+        (user?.full_name && m.full_name.toLowerCase() === user.full_name.toLowerCase())
+    );
+
     setEventForm({
       title: "",
       slug: "",
@@ -533,8 +555,19 @@ export const ExecomDashboard: React.FC = () => {
       registration_mode: "onsite",
       gform_url: "",
       registration_questions: [],
-      coordinator_name: user?.full_name || "",
-      coordinator_phone: "",
+      coordinator_name: myMember ? myMember.full_name : user?.full_name || "",
+      coordinator_phone: (myMember as any)?.phone_number || "",
+      coordinator1_name: myMember ? myMember.full_name : "",
+      coordinator1_id: myMember ? myMember.id : "",
+      coordinator1_phone: (myMember as any)?.phone_number || "",
+      coordinator2_name: "",
+      coordinator2_id: "",
+      coordinator2_phone: "",
+      coordinator2_type: "execom",
+      volunteer1_name: "",
+      volunteer1_type: "execom",
+      volunteer2_name: "",
+      volunteer2_type: "execom",
       created_by: user?.full_name || user?.email || "ExeCom Coordinator",
       created_by_id: user?.id || null,
     });
@@ -544,7 +577,7 @@ export const ExecomDashboard: React.FC = () => {
 
   const handleOpenEditEvent = (evt: EventItem) => {
     if (!canEditEvent(evt)) {
-      setEventError("Permission denied: You can only edit events created by you.");
+      setEventError("Permission denied: Only event coordinators and administrators can edit this event.");
       return;
     }
     setEditingEvent(evt);
@@ -563,6 +596,17 @@ export const ExecomDashboard: React.FC = () => {
       registration_questions: evt.registration_questions || [],
       coordinator_name: evt.coordinator_name || "",
       coordinator_phone: evt.coordinator_phone || "",
+      coordinator1_name: evt.coordinator1_name || evt.coordinator_name || "",
+      coordinator1_id: evt.coordinator1_id || "",
+      coordinator1_phone: evt.coordinator1_phone || evt.coordinator_phone || "",
+      coordinator2_name: evt.coordinator2_name || "",
+      coordinator2_id: evt.coordinator2_id || "",
+      coordinator2_phone: evt.coordinator2_phone || "",
+      coordinator2_type: evt.coordinator2_id ? "execom" : "external",
+      volunteer1_name: evt.volunteer1_name || "",
+      volunteer1_type: execomMembers.some((m) => m.full_name === evt.volunteer1_name) ? "execom" : "external",
+      volunteer2_name: evt.volunteer2_name || "",
+      volunteer2_type: execomMembers.some((m) => m.full_name === evt.volunteer2_name) ? "execom" : "external",
       created_by: evt.created_by || user?.full_name || user?.email || "",
       created_by_id: evt.created_by_id || user?.id || null,
     });
@@ -613,8 +657,14 @@ export const ExecomDashboard: React.FC = () => {
       return;
     }
 
+    // Validation: Minimum 1 coordinator must be an active ExeCom member
+    if (!eventForm.coordinator1_name.trim()) {
+      setEventError("Coordinator 1 is required and must be an active ExeCom member.");
+      return;
+    }
+
     if (editingEvent && !canEditEvent(editingEvent)) {
-      setEventError("Permission denied: You can only edit events created by you.");
+      setEventError("Permission denied: Only event coordinators and administrators can edit this event.");
       return;
     }
 
@@ -622,8 +672,13 @@ export const ExecomDashboard: React.FC = () => {
     setEventError("");
 
     try {
+      const combinedCoords = [eventForm.coordinator1_name, eventForm.coordinator2_name].filter(Boolean).join(", ");
+      const combinedPhones = eventForm.coordinator1_phone || eventForm.coordinator2_phone || "";
+
       const finalPayload = {
         ...eventForm,
+        coordinator_name: combinedCoords,
+        coordinator_phone: combinedPhones,
         // Non-admin members cannot directly publish events: require Admin/Super Admin approval
         publication_status: !isAdmin ? ("pending_approval" as PublicationStatus) : eventForm.publication_status,
       };
@@ -702,6 +757,18 @@ export const ExecomDashboard: React.FC = () => {
 
           {/* Right User Bar & Actions */}
           <div className="flex items-center gap-2.5">
+            {/* Quick QR Scanner Button */}
+            <Button
+              onClick={() => setActiveTab("scanner")}
+              variant="outline"
+              size="sm"
+              className="hidden sm:inline-flex text-xs h-8 gap-1.5 border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-bold"
+              title="Launch Live Event QR Scanner"
+            >
+              <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Scan QR</span>
+            </Button>
+
             {/* If Admin, allow quick toggle */}
             {isAdmin && (
               <Button asChild variant="outline" size="sm" className="hidden md:inline-flex text-xs h-8 gap-1.5 border-slate-300">
@@ -865,6 +932,14 @@ export const ExecomDashboard: React.FC = () => {
 
           <div className="flex items-center gap-2 shrink-0">
             <Button
+              onClick={() => setActiveTab("scanner")}
+              className="bg-emerald-400/20 hover:bg-emerald-400/30 text-emerald-300 border border-emerald-400/40 font-bold text-xs gap-1.5 shadow-xs h-9 px-3.5"
+            >
+              <QrCode className="w-4 h-4 text-emerald-400" />
+              <span>Scan QR Pass</span>
+            </Button>
+
+            <Button
               onClick={handleOpenCreateEvent}
               className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs gap-1.5 shadow-md shadow-emerald-950/20"
             >
@@ -936,238 +1011,129 @@ export const ExecomDashboard: React.FC = () => {
               </Card>
             </div>
 
-            {/* Community Activities & Today's Schedule Overview */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Left: Today's Schedule */}
-              <Card className="lg:col-span-5 p-5 border border-slate-200 bg-white rounded-2xl flex flex-col justify-between shadow-2xs">
-                <div className="space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                        <Clock className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <h3 className="text-xs font-bold text-slate-900">Today's Schedule</h3>
-                        <p className="text-[10px] text-slate-400">
-                          {new Date().toLocaleDateString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </p>
-                      </div>
-                    </div>
-
-                    <Badge
-                      variant={todayActivities.length > 0 ? "default" : "outline"}
-                      className={
-                        todayActivities.length > 0
-                          ? "bg-emerald-600 text-white text-[10px]"
-                          : "text-slate-400 text-[10px]"
-                      }
-                    >
-                      {todayActivities.length} {todayActivities.length === 1 ? "Activity" : "Activities"}
-                    </Badge>
+            {/* Upcoming Chapter Activities (Full-width prominence, no Today's Schedule) */}
+            <Card className="p-5 border border-slate-200 bg-white rounded-2xl shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <CalendarDays className="w-4 h-4" />
                   </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Upcoming Chapter Activities</h3>
+                    <p className="text-xs text-slate-500">Official workshops, technical talks, peer reviews, and campus hackathons</p>
+                  </div>
+                </div>
 
-                  {todayActivities.length === 0 ? (
-                    <div className="py-6 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-1.5">
-                      <CalendarDays className="w-7 h-7 text-slate-300" />
-                      <p>No community activities scheduled for today.</p>
-                      <button
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-xs font-bold text-slate-800">
+                    {upcomingActivities.length} Upcoming
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setActiveTab("calendar")}
+                    className="h-8 text-xs font-semibold gap-1 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                  >
+                    <span>Full Calendar</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {upcomingActivities.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                  <CalendarDays className="w-8 h-8 text-slate-300" />
+                  <p className="font-semibold text-slate-700">No upcoming chapter activities scheduled yet.</p>
+                  <Button
+                    onClick={() => setActiveTab("calendar")}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs text-emerald-700"
+                  >
+                    Open Chapter Activity Calendar
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {upcomingActivities.map((act) => {
+                    const dateObj = new Date(act.activity_date);
+                    return (
+                      <div
+                        key={act.id}
                         onClick={() => setActiveTab("calendar")}
-                        className="text-xs font-semibold text-emerald-700 hover:underline mt-1"
+                        className="p-3.5 bg-slate-50/70 hover:bg-slate-100/90 rounded-2xl border border-slate-200/80 cursor-pointer transition-all flex flex-col justify-between gap-3 group hover:border-emerald-300 hover:shadow-xs"
                       >
-                        Open Activity Calendar
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {todayActivities.map((act) => (
-                        <div
-                          key={act.id}
-                          onClick={() => setActiveTab("calendar")}
-                          className="p-2.5 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 cursor-pointer transition-all group"
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
                             <Badge
                               variant="outline"
-                              className={`text-[9px] px-1.5 py-0 font-semibold border ${getCategoryBadgeClasses(
+                              className={`text-[9px] px-2 py-0.5 font-bold border ${getCategoryBadgeClasses(
                                 act.category
                               )}`}
                             >
                               {act.category}
                             </Badge>
-                            <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
                               <Clock className="w-3 h-3 text-emerald-600" />
-                              {act.start_time}
+                              <span>{act.start_time}</span>
                             </span>
                           </div>
-                          <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors truncate">
-                            {act.title}
-                          </h4>
-                          <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5 truncate">
-                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="truncate">{act.venue}</span>
-                          </p>
 
-                          {(act.deadline_date || (act.coordinators && act.coordinators.length > 0) || (act.volunteers && act.volunteers.length > 0)) && (
-                            <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-1 text-[10px]">
-                              {act.coordinators && act.coordinators.length > 0 && (
-                                <span className="text-slate-600 font-medium flex items-center gap-1 truncate max-w-[180px]">
-                                  <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                                  <span className="truncate">{act.coordinators.join(", ")}</span>
-                                </span>
-                              )}
-                              <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                                {act.volunteers && act.volunteers.length > 0 && (
-                                  <span className="text-indigo-600 font-semibold flex items-center gap-0.5">
-                                    <Users className="w-2.5 h-2.5" />
-                                    {act.volunteers.length} vol.
-                                  </span>
-                                )}
-                                {act.deadline_date && (
-                                  <span className="text-amber-700 font-semibold flex items-center gap-0.5 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[9px]">
-                                    <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
-                                    Due: {new Date(act.deadline_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-3 border-t border-slate-100 mt-3">
-                  <button
-                    onClick={() => setActiveTab("calendar")}
-                    className="w-full flex items-center justify-between text-xs font-semibold text-emerald-700 hover:text-emerald-800"
-                  >
-                    <span>View Today in Full Calendar</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </Card>
-
-              {/* Right: Next 5 Upcoming Activities */}
-              <Card className="lg:col-span-7 p-5 border border-slate-200 bg-white rounded-2xl flex flex-col justify-between shadow-2xs">
-                <div className="space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                        <CalendarDays className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <h3 className="text-xs font-bold text-slate-900">Upcoming Activities</h3>
-                        <p className="text-[10px] text-slate-400">Next community sessions</p>
-                      </div>
-                    </div>
-
-                    <Badge variant="secondary" className="text-xs font-bold text-slate-800">
-                      {upcomingActivitiesCount} Total
-                    </Badge>
-                  </div>
-
-                  {upcomingActivities.length === 0 ? (
-                    <div className="py-6 text-center text-slate-400 text-xs">
-                      No upcoming community activities announced yet.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {upcomingActivities.map((act) => {
-                        const dateObj = new Date(act.activity_date);
-                        return (
-                          <div
-                            key={act.id}
-                            onClick={() => setActiveTab("calendar")}
-                            className="p-2.5 bg-slate-50/70 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 cursor-pointer transition-all flex flex-col gap-2 group"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex flex-col items-center justify-center text-center shrink-0">
-                                  <span className="text-[8px] uppercase font-bold text-slate-400 leading-none">
-                                    {dateObj.toLocaleDateString("en-US", { month: "short" })}
-                                  </span>
-                                  <span className="text-xs font-extrabold text-slate-800 leading-none mt-0.5">
-                                    {dateObj.getDate()}
-                                  </span>
-                                </div>
-
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <Badge
-                                      variant="outline"
-                                      className={`text-[8px] px-1 py-0 font-semibold border ${getCategoryBadgeClasses(
-                                        act.category
-                                      )}`}
-                                    >
-                                      {act.category}
-                                    </Badge>
-                                    <span className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
-                                      <Clock className="w-3 h-3 text-slate-300" />
-                                      {act.start_time}
-                                    </span>
-                                  </div>
-                                  <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors truncate">
-                                    {act.title}
-                                  </h4>
-                                </div>
-                              </div>
-
-                              <span className="text-[10px] text-slate-500 font-medium hidden sm:flex items-center gap-1 shrink-0">
-                                <MapPin className="w-3 h-3 text-slate-400" />
-                                <span className="truncate max-w-[120px]">{act.venue}</span>
+                          <div className="flex items-start gap-2.5">
+                            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex flex-col items-center justify-center text-center shrink-0 shadow-2xs">
+                              <span className="text-[9px] uppercase font-bold text-slate-400 leading-none">
+                                {dateObj.toLocaleDateString("en-US", { month: "short" })}
+                              </span>
+                              <span className="text-sm font-black text-slate-900 leading-none mt-0.5">
+                                {dateObj.getDate()}
                               </span>
                             </div>
 
-                            {(act.deadline_date || (act.coordinators && act.coordinators.length > 0) || (act.volunteers && act.volunteers.length > 0)) && (
-                              <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1.5 border-t border-slate-200/60 text-[10px]">
-                                {act.coordinators && act.coordinators.length > 0 && (
-                                  <div className="flex items-center gap-1 text-slate-600 font-medium truncate max-w-[220px]">
-                                    <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                                    <span className="truncate">{act.coordinators.join(", ")}</span>
-                                  </div>
-                                )}
-                                <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                                  {act.volunteers && act.volunteers.length > 0 && (
-                                    <span className="text-indigo-600 font-semibold flex items-center gap-0.5">
-                                      <Users className="w-2.5 h-2.5" />
-                                      {act.volunteers.length} vol.
-                                    </span>
-                                  )}
-                                  {act.deadline_date && (
-                                    <span className="text-amber-700 font-semibold flex items-center gap-0.5 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[9px]">
-                                      <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
-                                      Due: {new Date(act.deadline_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors line-clamp-2 leading-snug">
+                                {act.title}
+                              </h4>
+                              {act.venue && (
+                                <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1 truncate">
+                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span className="truncate">{act.venue}</span>
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                        </div>
 
-                <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">
-                    Showing next {upcomingActivities.length} activities
-                  </span>
-                  <button
-                    onClick={() => setActiveTab("calendar")}
-                    className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-                  >
-                    <span>Full Activity Calendar</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
+                        {(act.deadline_date || (act.coordinators && act.coordinators.length > 0) || (act.volunteers && act.volunteers.length > 0)) && (
+                          <div className="pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-600">
+                            {act.coordinators && act.coordinators.length > 0 ? (
+                              <span className="font-medium flex items-center gap-1 truncate max-w-[160px]">
+                                <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span className="truncate">{act.coordinators.join(", ")}</span>
+                              </span>
+                            ) : <span />}
+
+                            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                              {act.volunteers && act.volunteers.length > 0 && (
+                                <span className="text-indigo-600 font-semibold flex items-center gap-0.5 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                  <Users className="w-2.5 h-2.5" />
+                                  <span>{act.volunteers.length} vol.</span>
+                                </span>
+                              )}
+                              {act.deadline_date && (
+                                <span className="text-amber-700 font-semibold flex items-center gap-0.5 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[9px]">
+                                  <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+                                  <span>Due: {new Date(act.deadline_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </Card>
-            </div>
+              )}
+            </Card>
 
             {/* Filter & Action Bar */}
             <Card className="border border-slate-200 bg-white">
@@ -1696,12 +1662,14 @@ export const ExecomDashboard: React.FC = () => {
                     className="h-9 px-3 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white font-medium max-w-[280px] sm:max-w-[340px] truncate"
                   >
                     {events.length === 0 && <option value="">No events found</option>}
-                    {events.map((evt) => (
-                      <option key={evt.id} value={evt.id}>
-                        {evt.title} {evt.registration_mode === "gform" ? "(G-Form)" : "(Onsite QR)"}{" "}
-                        {evt.created_by_id === user?.id ? "⭐ Your Event" : ""}
-                      </option>
-                    ))}
+                    {events.map((evt) => {
+                      const isAllowed = canManageEventAttendees(evt);
+                      return (
+                        <option key={evt.id} value={evt.id}>
+                          {evt.title} {isAllowed ? "⭐ (Your Event)" : "🔒 (Restricted)"}
+                        </option>
+                      );
+                    })}
                   </select>
 
                   <Button
@@ -1796,8 +1764,27 @@ export const ExecomDashboard: React.FC = () => {
               </div>
             </Card>
 
-            {/* Participants Roster Table */}
+            {/* Participants Roster Table or Access Restriction */}
             {(() => {
+              const currentEvt = events.find((e) => e.id === selectedParticipantEventId);
+              const isAllowed = currentEvt ? canManageEventAttendees(currentEvt) : false;
+
+              if (currentEvt && !isAllowed && !isAdmin) {
+                return (
+                  <Card className="border border-amber-200 bg-amber-50/70 p-8 rounded-2xl text-center space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                      <Shield className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-amber-900">Access Restricted</h3>
+                      <p className="text-xs text-amber-800 mt-1 max-w-md mx-auto leading-relaxed">
+                        Only the assigned event coordinators ({[currentEvt.coordinator1_name, currentEvt.coordinator2_name].filter(Boolean).join(" & ") || currentEvt.coordinator_name || "Assigned Coordinators"}) and administrators have permission to view the registered participants list and mark attendance for this event.
+                      </p>
+                    </div>
+                  </Card>
+                );
+              }
+
               const filtered = participantRegistrations.filter((reg) => {
                 const q = participantSearch.toLowerCase();
                 const matchesQuery =
@@ -2339,30 +2326,295 @@ export const ExecomDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Coordinator Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700">
-                  Event Coordinator Name
-                </label>
-                <Input
-                  placeholder="e.g. Adithyan M / Shefeena"
-                  value={eventForm.coordinator_name}
-                  onChange={(e) => setEventForm({ ...eventForm, coordinator_name: e.target.value })}
-                  className="h-9 text-xs"
-                />
+            {/* ------------------------------------------------------------- */}
+            {/* DUAL COORDINATORS (2) & VOLUNTEERS (2) */}
+            {/* ------------------------------------------------------------- */}
+            <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Event Coordinators & Student Volunteers</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Assigned coordinators and admins can edit this event, manage registrations, and check in attendees.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                  Min. 1 ExeCom Coordinator
+                </Badge>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700">
-                  Coordinator Phone / WhatsApp
-                </label>
-                <Input
-                  placeholder="e.g. 9995601670"
-                  value={eventForm.coordinator_phone}
-                  onChange={(e) => setEventForm({ ...eventForm, coordinator_phone: e.target.value })}
-                  className="h-9 text-xs"
-                />
+              {/* Coordinators Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-slate-50/80 rounded-xl border border-slate-200/80">
+                {/* Coordinator 1: Required ExeCom Member */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                      <span>Coordinator 1 *</span>
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/60 px-1.5 py-0.2 rounded">
+                        ExeCom Member
+                      </span>
+                    </label>
+                  </div>
+                  <select
+                    required
+                    value={eventForm.coordinator1_id || eventForm.coordinator1_name}
+                    onChange={(e) => {
+                      const sel = execomMembers.find(
+                        (m) => m.id === e.target.value || m.full_name === e.target.value
+                      );
+                      if (sel) {
+                        setEventForm((prev) => ({
+                          ...prev,
+                          coordinator1_name: sel.full_name,
+                          coordinator1_id: sel.id,
+                          coordinator1_phone: prev.coordinator1_phone || (sel as any).phone_number || "",
+                        }));
+                      } else {
+                        setEventForm((prev) => ({
+                          ...prev,
+                          coordinator1_name: e.target.value,
+                          coordinator1_id: "",
+                        }));
+                      }
+                    }}
+                    className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg font-medium"
+                  >
+                    <option value="">-- Select ExeCom Coordinator --</option>
+                    {execomMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.full_name} ({m.designation} - {m.department})
+                      </option>
+                    ))}
+                  </select>
+
+                  <Input
+                    placeholder="Coordinator 1 Phone / WhatsApp"
+                    value={eventForm.coordinator1_phone}
+                    onChange={(e) =>
+                      setEventForm({ ...eventForm, coordinator1_phone: e.target.value })
+                    }
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+
+                {/* Coordinator 2: ExeCom or External */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800">Coordinator 2 (Optional)</label>
+                    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEventForm((prev) => ({ ...prev, coordinator2_type: "execom" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          eventForm.coordinator2_type === "execom"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        ExeCom
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEventForm((prev) => ({ ...prev, coordinator2_type: "external" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          eventForm.coordinator2_type === "external"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        Non-ExeCom
+                      </button>
+                    </div>
+                  </div>
+
+                  {eventForm.coordinator2_type === "execom" ? (
+                    <select
+                      value={eventForm.coordinator2_id || eventForm.coordinator2_name}
+                      onChange={(e) => {
+                        const sel = execomMembers.find(
+                          (m) => m.id === e.target.value || m.full_name === e.target.value
+                        );
+                        if (sel) {
+                          setEventForm((prev) => ({
+                            ...prev,
+                            coordinator2_name: sel.full_name,
+                            coordinator2_id: sel.id,
+                            coordinator2_phone: prev.coordinator2_phone || (sel as any).phone_number || "",
+                          }));
+                        } else {
+                          setEventForm((prev) => ({
+                            ...prev,
+                            coordinator2_name: "",
+                            coordinator2_id: "",
+                          }));
+                        }
+                      }}
+                      className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg font-medium"
+                    >
+                      <option value="">-- None / Select ExeCom Member --</option>
+                      {execomMembers
+                        .filter((m) => m.id !== eventForm.coordinator1_id)
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.full_name} ({m.designation})
+                          </option>
+                        ))}
+                    </select>
+                  ) : (
+                    <Input
+                      placeholder="Enter external coordinator full name"
+                      value={eventForm.coordinator2_name}
+                      onChange={(e) =>
+                        setEventForm({
+                          ...eventForm,
+                          coordinator2_name: e.target.value,
+                          coordinator2_id: "",
+                        })
+                      }
+                      className="h-9 text-xs bg-white"
+                    />
+                  )}
+
+                  <Input
+                    placeholder="Coordinator 2 Phone / WhatsApp"
+                    value={eventForm.coordinator2_phone}
+                    onChange={(e) =>
+                      setEventForm({ ...eventForm, coordinator2_phone: e.target.value })
+                    }
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Volunteers Grid (2) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-slate-50/80 rounded-xl border border-slate-200/80">
+                {/* Volunteer 1 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800">Volunteer 1 (Optional)</label>
+                    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEventForm((prev) => ({ ...prev, volunteer1_type: "execom" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          eventForm.volunteer1_type === "execom"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        ExeCom
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEventForm((prev) => ({ ...prev, volunteer1_type: "external" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          eventForm.volunteer1_type === "external"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        Non-ExeCom
+                      </button>
+                    </div>
+                  </div>
+
+                  {eventForm.volunteer1_type === "execom" ? (
+                    <select
+                      value={eventForm.volunteer1_name}
+                      onChange={(e) =>
+                        setEventForm({ ...eventForm, volunteer1_name: e.target.value })
+                      }
+                      className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg"
+                    >
+                      <option value="">-- None / Select ExeCom Volunteer --</option>
+                      {execomMembers.map((m) => (
+                        <option key={m.id} value={m.full_name}>
+                          {m.full_name} ({m.department})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      placeholder="e.g. Anjali Nair (S3 CSE)"
+                      value={eventForm.volunteer1_name}
+                      onChange={(e) =>
+                        setEventForm({ ...eventForm, volunteer1_name: e.target.value })
+                      }
+                      className="h-9 text-xs bg-white"
+                    />
+                  )}
+                </div>
+
+                {/* Volunteer 2 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800">Volunteer 2 (Optional)</label>
+                    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEventForm((prev) => ({ ...prev, volunteer2_type: "execom" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          eventForm.volunteer2_type === "execom"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        ExeCom
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEventForm((prev) => ({ ...prev, volunteer2_type: "external" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          eventForm.volunteer2_type === "external"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        Non-ExeCom
+                      </button>
+                    </div>
+                  </div>
+
+                  {eventForm.volunteer2_type === "execom" ? (
+                    <select
+                      value={eventForm.volunteer2_name}
+                      onChange={(e) =>
+                        setEventForm({ ...eventForm, volunteer2_name: e.target.value })
+                      }
+                      className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg"
+                    >
+                      <option value="">-- None / Select ExeCom Volunteer --</option>
+                      {execomMembers.map((m) => (
+                        <option key={m.id} value={m.full_name}>
+                          {m.full_name} ({m.department})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      placeholder="e.g. Rahul K (S5 ECE)"
+                      value={eventForm.volunteer2_name}
+                      onChange={(e) =>
+                        setEventForm({ ...eventForm, volunteer2_name: e.target.value })
+                      }
+                      className="h-9 text-xs bg-white"
+                    />
+                  )}
+                </div>
               </div>
             </div>
 

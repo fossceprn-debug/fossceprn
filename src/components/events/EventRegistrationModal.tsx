@@ -171,8 +171,14 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
         classSemester: registration.class_semester,
         ticketCode: registration.ticket_code,
         qrDataUrl: qrDataUrl,
-        coordinatorName: event.coordinator_name,
-        coordinatorPhone: event.coordinator_phone,
+        coordinatorName:
+          [event.coordinator1_name, event.coordinator2_name].filter(Boolean).join(" & ") ||
+          event.coordinator_name ||
+          "FOSS Chapter Coordinators",
+        coordinatorPhone:
+          [event.coordinator1_phone, event.coordinator2_phone].filter(Boolean).join(" / ") ||
+          event.coordinator_phone ||
+          "",
       });
 
       const link = document.createElement("a");
@@ -485,10 +491,14 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
 
                 {/* Coordinators Contact Details */}
                 <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-1 text-[11px] text-emerald-300/90">
-                  <span className="font-bold text-emerald-400">Event Coordinator:</span>
+                  <span className="font-bold text-emerald-400">Coordinators:</span>
                   <span className="font-medium text-slate-200">
-                    {event.coordinator_name || "FOSS CEPrn ExeCom Team"}
-                    {event.coordinator_phone ? ` (Ph: ${event.coordinator_phone})` : ""}
+                    {[event.coordinator1_name, event.coordinator2_name].filter(Boolean).join(" & ") ||
+                      event.coordinator_name ||
+                      "FOSS CEPrn ExeCom Team"}
+                    {event.coordinator1_phone || event.coordinator2_phone || event.coordinator_phone
+                      ? ` (Ph: ${[event.coordinator1_phone, event.coordinator2_phone].filter(Boolean).join(" / ") || event.coordinator_phone})`
+                      : ""}
                   </span>
                 </div>
 

@@ -87,6 +87,14 @@ export interface EventItem {
   approved_at?: string | null;
   coordinator_name?: string | null;
   coordinator_phone?: string | null;
+  coordinator1_name?: string | null;
+  coordinator1_id?: string | null;
+  coordinator1_phone?: string | null;
+  coordinator2_name?: string | null;
+  coordinator2_id?: string | null;
+  coordinator2_phone?: string | null;
+  volunteer1_name?: string | null;
+  volunteer2_name?: string | null;
   created_at: string;
 }
 

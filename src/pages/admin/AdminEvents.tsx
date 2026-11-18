@@ -41,6 +41,7 @@ import {
   deleteEventAdmin,
   clearEventRegistrationsAdmin,
   uploadStorageFile,
+  getAllExecomAdmin,
 } from "@/lib/adminService";
 import { formatDate } from "@/lib/utils";
 import { EventRegistrationQuestionsBuilder } from "@/components/events/EventRegistrationQuestionsBuilder";
@@ -51,11 +52,13 @@ import type {
   RegistrationStatus,
   RegistrationMode,
   RegistrationQuestion,
+  ExecomMember,
 } from "@/types";
 
 export const AdminEvents: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [execomMembers, setExecomMembers] = useState<ExecomMember[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -89,13 +92,28 @@ export const AdminEvents: React.FC = () => {
     registration_questions: [] as RegistrationQuestion[],
     coordinator_name: "",
     coordinator_phone: "",
+    coordinator1_name: "",
+    coordinator1_id: "",
+    coordinator1_phone: "",
+    coordinator2_name: "",
+    coordinator2_id: "",
+    coordinator2_phone: "",
+    coordinator2_type: "execom" as "execom" | "external",
+    volunteer1_name: "",
+    volunteer1_type: "execom" as "execom" | "external",
+    volunteer2_name: "",
+    volunteer2_type: "execom" as "execom" | "external",
   });
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await getAllEventsAdmin(search, status);
-      setEvents(data);
+      const [eventsData, teamData] = await Promise.all([
+        getAllEventsAdmin(search, status),
+        getAllExecomAdmin().catch(() => []),
+      ]);
+      setEvents(eventsData);
+      setExecomMembers(teamData);
     } catch (err) {
       console.error("Error loading events", err);
     } finally {
@@ -125,12 +143,23 @@ export const AdminEvents: React.FC = () => {
       end_date: new Date(Date.now() + 7 * 86400000 + 3600000 * 3).toISOString().slice(0, 16),
       cover_image: "",
       registration_status: "upcoming",
-      publication_status: "draft",
+      publication_status: "published",
       registration_mode: "onsite",
       gform_url: "",
       registration_questions: [],
       coordinator_name: "",
       coordinator_phone: "",
+      coordinator1_name: "",
+      coordinator1_id: "",
+      coordinator1_phone: "",
+      coordinator2_name: "",
+      coordinator2_id: "",
+      coordinator2_phone: "",
+      coordinator2_type: "execom",
+      volunteer1_name: "",
+      volunteer1_type: "execom",
+      volunteer2_name: "",
+      volunteer2_type: "execom",
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -153,6 +182,17 @@ export const AdminEvents: React.FC = () => {
       registration_questions: evt.registration_questions || [],
       coordinator_name: evt.coordinator_name || "",
       coordinator_phone: evt.coordinator_phone || "",
+      coordinator1_name: evt.coordinator1_name || evt.coordinator_name || "",
+      coordinator1_id: evt.coordinator1_id || "",
+      coordinator1_phone: evt.coordinator1_phone || evt.coordinator_phone || "",
+      coordinator2_name: evt.coordinator2_name || "",
+      coordinator2_id: evt.coordinator2_id || "",
+      coordinator2_phone: evt.coordinator2_phone || "",
+      coordinator2_type: evt.coordinator2_id ? "execom" : "external",
+      volunteer1_name: evt.volunteer1_name || "",
+      volunteer1_type: execomMembers.some((m) => m.full_name === evt.volunteer1_name) ? "execom" : "external",
+      volunteer2_name: evt.volunteer2_name || "",
+      volunteer2_type: execomMembers.some((m) => m.full_name === evt.volunteer2_name) ? "execom" : "external",
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -189,12 +229,22 @@ export const AdminEvents: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.coordinator1_name.trim()) {
+      setErrorMsg("Coordinator 1 is required and must be an active ExeCom member.");
+      return;
+    }
+
     setSaving(true);
     setErrorMsg("");
 
     try {
+      const combinedCoords = [formData.coordinator1_name, formData.coordinator2_name].filter(Boolean).join(", ");
+      const combinedPhones = formData.coordinator1_phone || formData.coordinator2_phone || "";
+
       const payload = {
         ...formData,
+        coordinator_name: combinedCoords,
+        coordinator_phone: combinedPhones,
         start_date: new Date(formData.start_date).toISOString(),
         end_date: formData.end_date ? new Date(formData.end_date).toISOString() : null,
       };
@@ -617,30 +667,295 @@ export const AdminEvents: React.FC = () => {
               </div>
             </div>
 
-            {/* Coordinator Info */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Event Coordinator Name
-                </label>
-                <Input
-                  placeholder="e.g. Adithyan / Shefeena"
-                  value={formData.coordinator_name}
-                  onChange={(e) => setFormData({ ...formData, coordinator_name: e.target.value })}
-                  className="h-9 text-xs rounded-xl"
-                />
+            {/* ------------------------------------------------------------- */}
+            {/* DUAL COORDINATORS (2) & VOLUNTEERS (2) */}
+            {/* ------------------------------------------------------------- */}
+            <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Event Coordinators & Student Volunteers</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Assign student coordinators and volunteers for this chapter workshop.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                  Min. 1 ExeCom Coordinator
+                </Badge>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Coordinator Phone / WhatsApp
-                </label>
-                <Input
-                  placeholder="e.g. 9876543210"
-                  value={formData.coordinator_phone}
-                  onChange={(e) => setFormData({ ...formData, coordinator_phone: e.target.value })}
-                  className="h-9 text-xs rounded-xl"
-                />
+              {/* Coordinators Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50/80 rounded-xl border border-slate-200/80">
+                {/* Coordinator 1: Required ExeCom Member */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                      <span>Coordinator 1 *</span>
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/60 px-1.5 py-0.2 rounded">
+                        ExeCom Member
+                      </span>
+                    </label>
+                  </div>
+                  <select
+                    required
+                    value={formData.coordinator1_id || formData.coordinator1_name}
+                    onChange={(e) => {
+                      const sel = execomMembers.find(
+                        (m) => m.id === e.target.value || m.full_name === e.target.value
+                      );
+                      if (sel) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          coordinator1_name: sel.full_name,
+                          coordinator1_id: sel.id,
+                          coordinator1_phone: prev.coordinator1_phone || (sel as any).phone_number || "",
+                        }));
+                      } else {
+                        setFormData((prev) => ({
+                          ...prev,
+                          coordinator1_name: e.target.value,
+                          coordinator1_id: "",
+                        }));
+                      }
+                    }}
+                    className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg font-medium"
+                  >
+                    <option value="">-- Select ExeCom Coordinator --</option>
+                    {execomMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.full_name} ({m.designation} - {m.department})
+                      </option>
+                    ))}
+                  </select>
+
+                  <Input
+                    placeholder="Coordinator 1 Phone / WhatsApp"
+                    value={formData.coordinator1_phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, coordinator1_phone: e.target.value })
+                    }
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+
+                {/* Coordinator 2: ExeCom or External */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800">Coordinator 2 (Optional)</label>
+                    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, coordinator2_type: "execom" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          formData.coordinator2_type === "execom"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        ExeCom
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, coordinator2_type: "external" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          formData.coordinator2_type === "external"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        Non-ExeCom
+                      </button>
+                    </div>
+                  </div>
+
+                  {formData.coordinator2_type === "execom" ? (
+                    <select
+                      value={formData.coordinator2_id || formData.coordinator2_name}
+                      onChange={(e) => {
+                        const sel = execomMembers.find(
+                          (m) => m.id === e.target.value || m.full_name === e.target.value
+                        );
+                        if (sel) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            coordinator2_name: sel.full_name,
+                            coordinator2_id: sel.id,
+                            coordinator2_phone: prev.coordinator2_phone || (sel as any).phone_number || "",
+                          }));
+                        } else {
+                          setFormData((prev) => ({
+                            ...prev,
+                            coordinator2_name: "",
+                            coordinator2_id: "",
+                          }));
+                        }
+                      }}
+                      className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg font-medium"
+                    >
+                      <option value="">-- None / Select ExeCom Member --</option>
+                      {execomMembers
+                        .filter((m) => m.id !== formData.coordinator1_id)
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.full_name} ({m.designation})
+                          </option>
+                        ))}
+                    </select>
+                  ) : (
+                    <Input
+                      placeholder="Enter external coordinator name"
+                      value={formData.coordinator2_name}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          coordinator2_name: e.target.value,
+                          coordinator2_id: "",
+                        })
+                      }
+                      className="h-9 text-xs bg-white"
+                    />
+                  )}
+
+                  <Input
+                    placeholder="Coordinator 2 Phone / WhatsApp"
+                    value={formData.coordinator2_phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, coordinator2_phone: e.target.value })
+                    }
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Volunteers Grid (2) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50/80 rounded-xl border border-slate-200/80">
+                {/* Volunteer 1 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800">Volunteer 1 (Optional)</label>
+                    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, volunteer1_type: "execom" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          formData.volunteer1_type === "execom"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        ExeCom
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, volunteer1_type: "external" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          formData.volunteer1_type === "external"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        Non-ExeCom
+                      </button>
+                    </div>
+                  </div>
+
+                  {formData.volunteer1_type === "execom" ? (
+                    <select
+                      value={formData.volunteer1_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, volunteer1_name: e.target.value })
+                      }
+                      className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg"
+                    >
+                      <option value="">-- None / Select ExeCom Volunteer --</option>
+                      {execomMembers.map((m) => (
+                        <option key={m.id} value={m.full_name}>
+                          {m.full_name} ({m.department})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      placeholder="e.g. Anjali Nair (S3 CSE)"
+                      value={formData.volunteer1_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, volunteer1_name: e.target.value })
+                      }
+                      className="h-9 text-xs bg-white"
+                    />
+                  )}
+                </div>
+
+                {/* Volunteer 2 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800">Volunteer 2 (Optional)</label>
+                    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, volunteer2_type: "execom" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          formData.volunteer2_type === "execom"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        ExeCom
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, volunteer2_type: "external" }))
+                        }
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          formData.volunteer2_type === "external"
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        Non-ExeCom
+                      </button>
+                    </div>
+                  </div>
+
+                  {formData.volunteer2_type === "execom" ? (
+                    <select
+                      value={formData.volunteer2_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, volunteer2_name: e.target.value })
+                      }
+                      className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg"
+                    >
+                      <option value="">-- None / Select ExeCom Volunteer --</option>
+                      {execomMembers.map((m) => (
+                        <option key={m.id} value={m.full_name}>
+                          {m.full_name} ({m.department})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      placeholder="e.g. Rahul K (S5 ECE)"
+                      value={formData.volunteer2_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, volunteer2_name: e.target.value })
+                      }
+                      className="h-9 text-xs bg-white"
+                    />
+                  )}
+                </div>
               </div>
             </div>
 

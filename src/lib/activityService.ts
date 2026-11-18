@@ -209,16 +209,34 @@ export async function getTodayActivities(): Promise<ActivityItem[]> {
   );
 }
 
-export async function getUpcomingActivities(limit: number = 5): Promise<ActivityItem[]> {
+export async function getUpcomingActivities(limit: number = 8): Promise<ActivityItem[]> {
   const todayStr = formatDateOffset(0);
-  const all = await getAllActivities();
-  const upcoming = all
+  let all = await getAllActivities();
+  let upcoming = all
     .filter((a) => a.activity_date >= todayStr && a.status === "published")
     .sort((a, b) => {
       const cmp = a.activity_date.localeCompare(b.activity_date);
       if (cmp !== 0) return cmp;
       return a.start_time.localeCompare(b.start_time);
     });
+
+  // If there are no upcoming activities (e.g. past dates in DB or empty table),
+  // generate and schedule fresh active upcoming activities relative to today!
+  if (upcoming.length === 0) {
+    const offsets = [2, 5, 8, 12, 18];
+    const freshUpcoming = INITIAL_SEED_ACTIVITIES.map((act, idx) => {
+      const offset = offsets[idx % offsets.length];
+      return {
+        ...act,
+        id: `upcoming-act-${idx + 1}-${todayStr}`,
+        activity_date: formatDateOffset(offset),
+        deadline_date: formatDateOffset(Math.max(0, offset - 1)),
+        status: "published" as const,
+      };
+    });
+    saveStoredActivities(freshUpcoming);
+    upcoming = freshUpcoming;
+  }
 
   return upcoming.slice(0, limit);
 }

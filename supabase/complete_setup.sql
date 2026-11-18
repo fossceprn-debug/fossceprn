@@ -1800,6 +1800,17 @@ CREATE POLICY "Staff can delete event registrations"
   ON public.event_registrations FOR DELETE
   USING (true);
 
+-- Ensure public.events has dual coordinator and volunteer columns
+ALTER TABLE public.events
+  ADD COLUMN IF NOT EXISTS coordinator1_name TEXT,
+  ADD COLUMN IF NOT EXISTS coordinator1_id TEXT,
+  ADD COLUMN IF NOT EXISTS coordinator1_phone TEXT,
+  ADD COLUMN IF NOT EXISTS coordinator2_name TEXT,
+  ADD COLUMN IF NOT EXISTS coordinator2_id TEXT,
+  ADD COLUMN IF NOT EXISTS coordinator2_phone TEXT,
+  ADD COLUMN IF NOT EXISTS volunteer1_name TEXT,
+  ADD COLUMN IF NOT EXISTS volunteer2_name TEXT;
+
 -- ============================================================================
 -- END OF SETUP
 -- All ExeCom coordinators, events, and members are managed dynamically via
