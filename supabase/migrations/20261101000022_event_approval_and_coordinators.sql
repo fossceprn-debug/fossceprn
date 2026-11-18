@@ -33,3 +33,4 @@ CREATE POLICY "Anyone can view published events"
 
 -- Reload schema
 NOTIFY pgrst, 'reload schema';
+

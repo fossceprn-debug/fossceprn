@@ -19,6 +19,8 @@ import {
   QrCode,
   FileText,
   Link2,
+  Database,
+  Check,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,6 +39,7 @@ import {
   createEventAdmin,
   updateEventAdmin,
   deleteEventAdmin,
+  clearEventRegistrationsAdmin,
   uploadStorageFile,
 } from "@/lib/adminService";
 import { formatDate } from "@/lib/utils";
@@ -63,6 +66,8 @@ export const AdminEvents: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [clearRegConfirmEvent, setClearRegConfirmEvent] = useState<EventItem | null>(null);
+  const [clearingRegs, setClearingRegs] = useState(false);
   const [attendeesEvent, setAttendeesEvent] = useState<EventItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -215,6 +220,19 @@ export const AdminEvents: React.FC = () => {
       loadData();
     } catch (err) {
       console.error("Error deleting event", err);
+    }
+  };
+
+  const handleClearRegistrations = async (eventId: string) => {
+    setClearingRegs(true);
+    try {
+      await clearEventRegistrationsAdmin(eventId);
+      setClearRegConfirmEvent(null);
+      loadData();
+    } catch (err) {
+      console.error("Error clearing event registrations", err);
+    } finally {
+      setClearingRegs(false);
     }
   };
 
@@ -420,13 +438,22 @@ export const AdminEvents: React.FC = () => {
                     <td className="py-3 px-4 text-right">
                       <div className="inline-flex items-center gap-1">
                         {evt.registration_mode !== "gform" && (
-                          <button
-                            onClick={() => setAttendeesEvent(evt)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50"
-                            title="View Attendees & QR Check-In"
-                          >
-                            <Users className="w-3.5 h-3.5" />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => setAttendeesEvent(evt)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50"
+                              title="View Attendees & QR Check-In"
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setClearRegConfirmEvent(evt)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50"
+                              title="Purge Event Registrations (Free Database Storage)"
+                            >
+                              <Database className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
                         <Button
                           asChild
@@ -826,6 +853,63 @@ export const AdminEvents: React.FC = () => {
               className="h-9 text-xs bg-rose-600 hover:bg-rose-700 text-white"
             >
               Confirm Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* CLEAR REGISTRATIONS DATABASE DIALOG */}
+      <Dialog
+        open={Boolean(clearRegConfirmEvent)}
+        onOpenChange={(open) => !open && setClearRegConfirmEvent(null)}
+      >
+        <DialogContent className="max-w-md p-6 bg-white rounded-2xl text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+            <Database className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
+              Clear Registrations Database?
+            </h3>
+            {clearRegConfirmEvent && (
+              <p className="text-xs font-semibold text-slate-700 mt-1">
+                Event: {clearRegConfirmEvent.title}
+              </p>
+            )}
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              This will permanently delete all student registrations, attendance logs, and QR code tickets for this event from the Supabase database to retain storage capacity. The event post itself and venue information will remain intact.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={clearingRegs}
+              onClick={() => setClearRegConfirmEvent(null)}
+              className="h-9 text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              disabled={clearingRegs}
+              onClick={() =>
+                clearRegConfirmEvent && handleClearRegistrations(clearRegConfirmEvent.id)
+              }
+              className="h-9 text-xs bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
+            >
+              {clearingRegs ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Purging...</span>
+                </>
+              ) : (
+                <>
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Purge & Free Storage</span>
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>

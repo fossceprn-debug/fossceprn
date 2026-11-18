@@ -290,3 +290,4 @@ export async function generateInvitationPassImage(options: InvitationPassOptions
 
   return canvas.toDataURL("image/png");
 }
+

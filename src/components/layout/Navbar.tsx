@@ -58,7 +58,7 @@ export const Navbar: React.FC = () => {
   const getDashboardLabel = () => {
     if (isSuperAdmin || isAdmin) return "Admin Dashboard";
     if (isFaculty) return "Faculty Console";
-    if (isEditor) return "ExeCom Dashboard";
+    if (isEditor) return "ExeCom Member Dashboard";
     return "Dashboard";
   };
 

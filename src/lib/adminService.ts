@@ -888,6 +888,8 @@ export async function updateEventAdmin(id: string, updates: Partial<EventItem>):
 export async function deleteEventAdmin(id: string): Promise<void> {
   if (isSupabaseConfigured) {
     try {
+      // Also delete attendee registrations to prevent orphan rows and free up storage
+      await supabase.from("event_registrations").delete().eq("event_id", id);
       const { error } = await supabase.from("events").delete().eq("id", id);
       if (error) {
         console.warn("Supabase event delete failed, deleting from local cache:", error?.message);
@@ -899,6 +901,8 @@ export async function deleteEventAdmin(id: string): Promise<void> {
 
   const cached = getStoredEvents();
   saveStoredEvents(cached.filter((e) => e.id !== id));
+  const regCached = getStoredEventRegistrations();
+  saveStoredEventRegistrations(regCached.filter((r) => r.event_id !== id));
   logActivity("Deleted Event", "event", id).catch(() => {});
 }
 
@@ -1125,6 +1129,32 @@ export async function approveEventAdmin(
     approved_by: approverName,
     approved_at: new Date().toISOString(),
   });
+}
+
+export async function clearEventRegistrationsAdmin(
+  eventId: string
+): Promise<{ success: boolean; error?: string }> {
+  if (isSupabaseConfigured) {
+    try {
+      const { error } = await supabase
+        .from("event_registrations")
+        .delete()
+        .eq("event_id", eventId);
+      if (error) {
+        console.warn("Supabase clear event registrations failed:", error.message);
+      }
+    } catch (err: any) {
+      console.warn("Supabase clear event registrations exception:", err);
+    }
+  }
+
+  const cached = getStoredEventRegistrations();
+  saveStoredEventRegistrations(cached.filter((r) => r.event_id !== eventId));
+  logActivity("Cleared Event Registrations Database", "event_registrations", eventId, {
+    cleared: true,
+  }).catch(() => {});
+
+  return { success: true };
 }
 
 // ----------------------------------------------------------------------------

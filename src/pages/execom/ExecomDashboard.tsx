@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Html5Qrcode } from "html5-qrcode";
 import {
   Calendar,
   Users,
@@ -16,6 +17,7 @@ import {
   LogOut,
   Upload,
   UserCheck,
+  UserX,
   Github,
   Linkedin,
   Mail,
@@ -27,6 +29,17 @@ import {
   QrCode,
   Link2,
   Check,
+  Camera,
+  CameraOff,
+  Download,
+  Copy,
+  Phone,
+  Filter,
+  Volume2,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+  Ticket,
 } from "lucide-react";
 import { useAuth } from "@/lib/authContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,6 +61,9 @@ import {
   uploadStorageFile,
   getAllExecomAdmin,
   getAllAnnouncementsAdmin,
+  getEventRegistrations,
+  checkInAttendee,
+  updateAttendeeAttendance,
 } from "@/lib/adminService";
 import {
   getTodayActivities,
@@ -67,20 +83,55 @@ import type {
   RegistrationMode,
   RegistrationQuestion,
   ActivityItem,
+  EventRegistration,
 } from "@/types";
+
+export type ExecomDashboardTab =
+  | "events"
+  | "scanner"
+  | "participants"
+  | "calendar"
+  | "team"
+  | "announcements";
+
+function playBeepSound(type: "success" | "error" = "success") {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(type === "success" ? 880 : 330, ctx.currentTime);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch {}
+}
 
 export const ExecomDashboard: React.FC = () => {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Active Tab: "events" | "calendar" | "team" | "announcements"
-  const urlTab = searchParams.get("tab");
-  const [activeTab, setActiveTabState] = useState<"events" | "calendar" | "team" | "announcements">(
-    urlTab === "calendar" || urlTab === "team" || urlTab === "announcements" ? urlTab : "events"
+  // Active Tab: "events" | "scanner" | "participants" | "calendar" | "team" | "announcements"
+  const urlTab = searchParams.get("tab") as ExecomDashboardTab | null;
+  const validTabs: ExecomDashboardTab[] = [
+    "events",
+    "scanner",
+    "participants",
+    "calendar",
+    "team",
+    "announcements",
+  ];
+  const [activeTab, setActiveTabState] = useState<ExecomDashboardTab>(
+    urlTab && validTabs.includes(urlTab) ? urlTab : "events"
   );
 
-  const setActiveTab = (tab: "events" | "calendar" | "team" | "announcements") => {
+  const setActiveTab = (tab: ExecomDashboardTab) => {
     setActiveTabState(tab);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -90,9 +141,9 @@ export const ExecomDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    const tabFromUrl = searchParams.get("tab");
-    if (tabFromUrl && ["events", "calendar", "team", "announcements"].includes(tabFromUrl)) {
-      setActiveTabState(tabFromUrl as any);
+    const tabFromUrl = searchParams.get("tab") as ExecomDashboardTab | null;
+    if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+      setActiveTabState(tabFromUrl);
     }
   }, [searchParams]);
 
@@ -151,6 +202,46 @@ export const ExecomDashboard: React.FC = () => {
     return false;
   };
 
+  const canEditEvent = (evt: EventItem) => {
+    if (isAdmin) return true;
+    if (evt.created_by_id && user?.id && evt.created_by_id === user.id) return true;
+    if (evt.created_by && user?.email && evt.created_by.toLowerCase() === user.email.toLowerCase()) return true;
+    if (evt.created_by && user?.full_name && evt.created_by.toLowerCase() === user.full_name.toLowerCase()) return true;
+    return false;
+  };
+
+  // --------------------------------------------------------------------------
+  // Dedicated Scanner Tab State
+  // --------------------------------------------------------------------------
+  const [selectedScanEventId, setSelectedScanEventId] = useState<string>("");
+  const [isScanningCamera, setIsScanningCamera] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const [manualTicketCode, setManualTicketCode] = useState("");
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [scanResult, setScanResult] = useState<{
+    type: "success" | "warning" | "error";
+    title: string;
+    message: string;
+    registration?: EventRegistration;
+  } | null>(null);
+  const [recentScans, setRecentScans] = useState<{
+    registration: EventRegistration;
+    timestamp: string;
+    isNew: boolean;
+  }[]>([]);
+  const html5QrScannerRef = useRef<Html5Qrcode | null>(null);
+
+  // --------------------------------------------------------------------------
+  // Dedicated Participants Tab State
+  // --------------------------------------------------------------------------
+  const [selectedParticipantEventId, setSelectedParticipantEventId] = useState<string>("");
+  const [participantRegistrations, setParticipantRegistrations] = useState<EventRegistration[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [participantSearch, setParticipantSearch] = useState("");
+  const [participantStatusFilter, setParticipantStatusFilter] = useState<"all" | "checked_in" | "pending">("all");
+  const [togglingAttendanceId, setTogglingAttendanceId] = useState<string | null>(null);
+  const [copiedTicketCode, setCopiedTicketCode] = useState<string | null>(null);
+
   const handleApproveEvent = async (evt: EventItem) => {
     try {
       await updateEventAdmin(evt.id, {
@@ -163,6 +254,204 @@ export const ExecomDashboard: React.FC = () => {
       setEventError(err.message || "Failed to approve event.");
     }
   };
+
+  const loadParticipantRegistrations = async (eventId: string) => {
+    if (!eventId) return;
+    setLoadingParticipants(true);
+    try {
+      const data = await getEventRegistrations(eventId);
+      setParticipantRegistrations(data);
+    } catch (err) {
+      console.error("Error loading event registrations:", err);
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedParticipantEventId) {
+      loadParticipantRegistrations(selectedParticipantEventId);
+    }
+  }, [selectedParticipantEventId]);
+
+  const handleToggleAttendance = async (reg: EventRegistration) => {
+    setTogglingAttendanceId(reg.id);
+    try {
+      const nextChecked = !reg.checked_in;
+      const res = await updateAttendeeAttendance(reg.id, nextChecked);
+      if (res.success && res.registration) {
+        setParticipantRegistrations((prev) =>
+          prev.map((r) => (r.id === reg.id ? res.registration! : r))
+        );
+      }
+    } catch (err) {
+      console.error("Error toggling attendance:", err);
+    } finally {
+      setTogglingAttendanceId(null);
+    }
+  };
+
+  const handleExportCsv = () => {
+    const curEvent = events.find((e) => e.id === selectedParticipantEventId);
+    if (!curEvent) return;
+    if (participantRegistrations.length === 0) {
+      alert("No registered participants found to export.");
+      return;
+    }
+
+    const baseHeaders = [
+      "Ticket Code",
+      "Full Name",
+      "Email",
+      "Phone",
+      "Class / Semester",
+      "Attendance Status",
+      "Check-in Timestamp",
+      "Registered At",
+    ];
+    const questionHeaders = (curEvent.registration_questions || []).map((q) => q.label);
+    const headers = [...baseHeaders, ...questionHeaders];
+
+    const rows = participantRegistrations.map((reg) => {
+      const baseCols = [
+        reg.ticket_code,
+        `"${(reg.full_name || "").replace(/"/g, '""')}"`,
+        reg.email,
+        reg.phone || "",
+        `"${(reg.class_semester || "").replace(/"/g, '""')}"`,
+        reg.checked_in ? "Checked In" : "Pending",
+        reg.checked_in_at ? new Date(reg.checked_in_at).toLocaleString() : "",
+        reg.created_at ? new Date(reg.created_at).toLocaleString() : "",
+      ];
+      const questionCols = (curEvent.registration_questions || []).map((q) => {
+        const ans = reg.responses?.[q.id] ?? "";
+        return `"${String(ans).replace(/"/g, '""')}"`;
+      });
+      return [...baseCols, ...questionCols].join(",");
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+    const encoded = encodeURI(csvContent);
+    const a = document.createElement("a");
+    a.href = encoded;
+    a.download = `${(curEvent.title || "event").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-participants.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleProcessTicketCode = async (rawCode: string) => {
+    const code = rawCode.trim();
+    if (!code) return;
+    setVerifyingCode(true);
+    try {
+      const res = await checkInAttendee(code, selectedScanEventId || undefined);
+      if (res.success && res.registration) {
+        const reg = res.registration;
+        const wasAlready =
+          recentScans.some((s) => s.registration.id === reg.id) ||
+          (reg.checked_in &&
+            reg.checked_in_at &&
+            Date.now() - new Date(reg.checked_in_at).getTime() > 12000);
+
+        playBeepSound("success");
+        setScanResult({
+          type: wasAlready ? "warning" : "success",
+          title: wasAlready ? "Already Checked In" : "Check-in Successful!",
+          message: wasAlready
+            ? `${reg.full_name} (${reg.ticket_code}) was already checked in at ${
+                reg.checked_in_at ? new Date(reg.checked_in_at).toLocaleTimeString() : "earlier"
+              }.`
+            : `${reg.full_name} (${reg.ticket_code}) verified and checked in!`,
+          registration: reg,
+        });
+
+        setRecentScans((prev) => [
+          {
+            registration: reg,
+            timestamp: new Date().toLocaleTimeString(),
+            isNew: !wasAlready,
+          },
+          ...prev.slice(0, 19),
+        ]);
+
+        // Update participants state if loaded
+        setParticipantRegistrations((prev) =>
+          prev.map((r) => (r.id === reg.id ? reg : r))
+        );
+        setManualTicketCode("");
+      } else {
+        playBeepSound("error");
+        setScanResult({
+          type: "error",
+          title: "Invalid Ticket",
+          message: res.error || `Ticket "${code}" not found for this event.`,
+        });
+      }
+    } catch (err: any) {
+      playBeepSound("error");
+      setScanResult({
+        type: "error",
+        title: "Scan Error",
+        message: err.message || "Could not process ticket code.",
+      });
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
+  const startCameraScanner = async () => {
+    setCameraError("");
+    setIsScanningCamera(true);
+    try {
+      if (html5QrScannerRef.current) {
+        try {
+          if (html5QrScannerRef.current.isScanning) {
+            await html5QrScannerRef.current.stop();
+          }
+        } catch {}
+      }
+      const scanner = new Html5Qrcode("dashboard-camera-qr-reader");
+      html5QrScannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+        },
+        async (decodedText) => {
+          await handleProcessTicketCode(decodedText);
+        },
+        () => {}
+      );
+    } catch (err: any) {
+      console.error("Camera scanner error:", err);
+      setCameraError(err?.message || "Camera access denied or device not supported.");
+      setIsScanningCamera(false);
+    }
+  };
+
+  const stopCameraScanner = async () => {
+    if (html5QrScannerRef.current) {
+      try {
+        if (html5QrScannerRef.current.isScanning) {
+          await html5QrScannerRef.current.stop();
+        }
+        await html5QrScannerRef.current.clear();
+      } catch {}
+      html5QrScannerRef.current = null;
+    }
+    setIsScanningCamera(false);
+  };
+
+  useEffect(() => {
+    if (activeTab !== "scanner") {
+      stopCameraScanner();
+    }
+    return () => {
+      stopCameraScanner();
+    };
+  }, [activeTab]);
 
   const loadData = async () => {
     try {
@@ -199,6 +488,18 @@ export const ExecomDashboard: React.FC = () => {
       setAnnouncements(announceData);
       setTodayActivities(todayActs);
       setUpcomingActivities(upActs);
+
+      if (eventsData.length > 0) {
+        const userEvent =
+          eventsData.find(
+            (e) => (canManageEventAttendees(e) || e.created_by_id === user?.id) && e.registration_mode !== "gform"
+          ) ||
+          eventsData.find((e) => e.registration_mode !== "gform") ||
+          eventsData[0];
+
+        setSelectedScanEventId((prev) => prev || userEvent.id);
+        setSelectedParticipantEventId((prev) => prev || userEvent.id);
+      }
 
       const todayStr = new Date().toISOString().split("T")[0];
       const count = allActs.filter(
@@ -242,6 +543,10 @@ export const ExecomDashboard: React.FC = () => {
   };
 
   const handleOpenEditEvent = (evt: EventItem) => {
+    if (!canEditEvent(evt)) {
+      setEventError("Permission denied: You can only edit events created by you.");
+      return;
+    }
     setEditingEvent(evt);
     setEventForm({
       title: evt.title,
@@ -305,6 +610,11 @@ export const ExecomDashboard: React.FC = () => {
     e.preventDefault();
     if (!eventForm.title.trim()) {
       setEventError("Event title is required.");
+      return;
+    }
+
+    if (editingEvent && !canEditEvent(editingEvent)) {
+      setEventError("Permission denied: You can only edit events created by you.");
       return;
     }
 
@@ -378,7 +688,7 @@ export const ExecomDashboard: React.FC = () => {
                   FOSS CEPrn
                 </span>
                 <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mt-0.5">
-                  ExeCom Dashboard
+                  ExeCom Member Dashboard
                 </span>
               </div>
             </Link>
@@ -386,7 +696,7 @@ export const ExecomDashboard: React.FC = () => {
             <span className="hidden sm:inline-block h-4 w-px bg-slate-200 mx-1" />
 
             <Badge variant="outline" className="hidden sm:inline-flex bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold py-0.5 px-2">
-              COORDINATOR · EDITOR
+              EXECOM MEMBER DASHBOARD
             </Badge>
           </div>
 
@@ -458,6 +768,30 @@ export const ExecomDashboard: React.FC = () => {
             </button>
 
             <button
+              onClick={() => setActiveTab("scanner")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === "scanner"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
+              }`}
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span>Event QR Scanner</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("participants")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === "participants"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Participants List</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("calendar")}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeTab === "calendar"
@@ -515,17 +849,17 @@ export const ExecomDashboard: React.FC = () => {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Welcome back, {user?.full_name || "ExeCom Lead"}
+                Welcome back, {user?.full_name || "ExeCom Member"}
               </span>
               <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-[10px]">
-                Active Session
+                ExeCom Member Session
               </Badge>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-              ExeCom Leadership Dashboard
+              ExeCom Member Dashboard
             </h1>
             <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-              Plan and publish chapter events, create workshops and hackathons, and review your official ExeCom team members.
+              Create and manage chapter workshops, check in attendees with live QR scanning, track student attendance, and coordinate with ExeCom team members.
             </p>
           </div>
 
@@ -1013,18 +1347,37 @@ export const ExecomDashboard: React.FC = () => {
                           </Button>
                         )}
 
-                        {/* Attendees & QR Attendance button (for event creator, admins, and super admins) */}
-                        {canManageEventAttendees(evt) && evt.registration_mode !== "gform" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setAttendeesEvent(evt)}
-                            className="h-7 px-2 text-xs font-bold text-slate-700 border-slate-200 hover:bg-slate-50"
-                            title="View registered students, scan QR code, or mark attendance without QR"
-                          >
-                            <Users className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                            <span>Attendees</span>
-                          </Button>
+                        {/* Attendees & QR Attendance quick shortcuts */}
+                        {evt.registration_mode !== "gform" && canManageEventAttendees(evt) && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedScanEventId(evt.id);
+                                setActiveTab("scanner");
+                              }}
+                              className="h-7 px-2 text-xs font-bold text-emerald-700 border-emerald-200 bg-white hover:bg-emerald-50"
+                              title="Open live camera QR scanner for this event"
+                            >
+                              <QrCode className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                              <span>Scan QR</span>
+                            </Button>
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedParticipantEventId(evt.id);
+                                setActiveTab("participants");
+                              }}
+                              className="h-7 px-2 text-xs font-bold text-blue-700 border-blue-200 bg-white hover:bg-blue-50"
+                              title="View participants roster and mark attendance without QR"
+                            >
+                              <Users className="w-3.5 h-3.5 mr-1 text-blue-600" />
+                              <span>Participants</span>
+                            </Button>
+                          </>
                         )}
 
                         <Button
@@ -1039,21 +1392,557 @@ export const ExecomDashboard: React.FC = () => {
                           </Link>
                         </Button>
 
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenEditEvent(evt)}
-                          className="h-7 px-2 text-xs font-bold text-emerald-700 border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 mr-1" />
-                          <span>Edit</span>
-                        </Button>
+                        {/* Only Event Creator or Admin can edit */}
+                        {canEditEvent(evt) ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenEditEvent(evt)}
+                            className="h-7 px-2 text-xs font-bold text-emerald-700 border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100"
+                            title="Edit event details"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 mr-1" />
+                            <span>Edit</span>
+                          </Button>
+                        ) : (
+                          <span
+                            className="text-[10px] text-slate-400 font-medium px-2 py-1 bg-slate-100 rounded border border-slate-200 inline-flex items-center gap-1 cursor-default"
+                            title="Only the creator or an admin can edit this event"
+                          >
+                            <span>🔒</span>
+                            <span>Locked</span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   </Card>
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ================================================================ */}
+        {/* TAB: EVENT QR SCANNER */}
+        {/* ================================================================ */}
+        {activeTab === "scanner" && (
+          <div className="space-y-6">
+            {/* Header / Event Selector Card */}
+            <Card className="p-5 border border-slate-200 bg-white rounded-2xl shadow-xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <QrCode className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900">Event Check-in QR Scanner</h2>
+                      <p className="text-xs text-slate-500">
+                        Scan attendee invitation pass QR codes via device camera or enter ticket codes manually.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Event Selector */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
+                    Selected Event:
+                  </label>
+                  <select
+                    value={selectedScanEventId}
+                    onChange={(e) => {
+                      setSelectedScanEventId(e.target.value);
+                      setScanResult(null);
+                    }}
+                    className="h-9 px-3 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white font-medium max-w-[280px] sm:max-w-[360px] truncate"
+                  >
+                    {events.length === 0 && <option value="">No events available</option>}
+                    {events.map((evt) => (
+                      <option key={evt.id} value={evt.id}>
+                        {evt.title} {evt.registration_mode === "gform" ? "(G-Form)" : "(Onsite QR)"}{" "}
+                        {evt.created_by_id === user?.id ? "⭐ Your Event" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Live Camera Scanner */}
+              <Card className="lg:col-span-6 p-5 border border-slate-200 bg-white rounded-2xl shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-emerald-600" />
+                    <h3 className="text-sm font-bold text-slate-900">Live Camera QR Scanner</h3>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-600">
+                    {isScanningCamera ? "Camera Active" : "Camera Standby"}
+                  </Badge>
+                </div>
+
+                {/* Viewfinder Area */}
+                <div className="relative w-full aspect-square max-w-[340px] mx-auto rounded-2xl overflow-hidden bg-slate-950 flex flex-col items-center justify-center border border-slate-300">
+                  <div id="dashboard-camera-qr-reader" className="w-full h-full" />
+                  {!isScanningCamera && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-white bg-slate-900/90 space-y-3">
+                      <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                        <QrCode className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Camera is Off</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Click the button below to turn on your webcam or mobile camera to scan attendee passes.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {cameraError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{cameraError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  {!isScanningCamera ? (
+                    <Button
+                      onClick={startCameraScanner}
+                      disabled={!selectedScanEventId}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 h-9 px-5 shadow-sm"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Start Camera Scanner</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={stopCameraScanner}
+                      variant="outline"
+                      className="text-rose-600 border-rose-300 hover:bg-rose-50 font-bold text-xs gap-2 h-9 px-5"
+                    >
+                      <CameraOff className="w-4 h-4" />
+                      <span>Stop Scanner</span>
+                    </Button>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+                  💡 Make sure the attendee holds their downloaded <strong>INVITATION PASS</strong> QR code steady inside the frame. Audio feedback beeps automatically on verification.
+                </p>
+              </Card>
+
+              {/* Right Column: Manual Input, Live Result & Recent Check-in Stream */}
+              <div className="lg:col-span-6 space-y-6">
+                {/* Manual Ticket Input Card */}
+                <Card className="p-5 border border-slate-200 bg-white rounded-2xl shadow-xs space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Ticket className="w-4 h-4 text-emerald-600" />
+                    <h3 className="text-sm font-bold text-slate-900">Manual Ticket Code Verification</h3>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    If the attendee’s phone screen is dim, unreadable, or camera is unavailable, enter their ticket code below (e.g. <code>CEPRN-123456</code>).
+                  </p>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleProcessTicketCode(manualTicketCode);
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Input
+                      value={manualTicketCode}
+                      onChange={(e) => setManualTicketCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. CEPRN-A1B2C3"
+                      className="h-9 text-xs font-mono tracking-wider uppercase border-slate-200 rounded-xl"
+                    />
+                    <Button
+                      type="submit"
+                      disabled={verifyingCode || !manualTicketCode.trim()}
+                      className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                    >
+                      {verifyingCode ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4 mr-1" />
+                          <span>Check In</span>
+                        </>
+                      )}
+                    </Button>
+                  </form>
+
+                  {/* Verification Result Feedback */}
+                  {scanResult && (
+                    <div
+                      className={`p-4 rounded-xl border text-xs space-y-2 transition-all ${
+                        scanResult.type === "success"
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                          : scanResult.type === "warning"
+                          ? "bg-amber-50 border-amber-300 text-amber-900"
+                          : "bg-rose-50 border-rose-300 text-rose-900"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {scanResult.type === "success" ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                        ) : scanResult.type === "warning" ? (
+                          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                        ) : (
+                          <XCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                        )}
+                        <span className="font-bold text-sm">{scanResult.title}</span>
+                      </div>
+                      <p className="text-xs leading-relaxed">{scanResult.message}</p>
+
+                      {scanResult.registration && (
+                        <div className="pt-2 border-t border-emerald-200/60 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-medium">
+                          <span>Name: <strong>{scanResult.registration.full_name}</strong></span>
+                          <span>Email: {scanResult.registration.email}</span>
+                          {scanResult.registration.class_semester && (
+                            <span>Class: {scanResult.registration.class_semester}</span>
+                          )}
+                          {scanResult.registration.phone && (
+                            <span>Phone: {scanResult.registration.phone}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Card>
+
+                {/* Live Session Check-ins Feed */}
+                <Card className="p-5 border border-slate-200 bg-white rounded-2xl shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <UserCheck className="w-4 h-4 text-emerald-600" />
+                      <h3 className="text-sm font-bold text-slate-900">Session Check-ins</h3>
+                    </div>
+                    <Badge variant="secondary" className="text-[10px] font-bold">
+                      {recentScans.length} Admitted
+                    </Badge>
+                  </div>
+
+                  {recentScans.length === 0 ? (
+                    <div className="py-8 text-center text-slate-400 text-xs">
+                      No tickets checked in during this session yet. Scan a QR code or enter a ticket code above.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                      {recentScans.map((item, idx) => (
+                        <div
+                          key={`${item.registration.id}-${idx}`}
+                          className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 truncate">
+                                {item.registration.full_name}
+                              </span>
+                              <span className="font-mono text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                {item.registration.ticket_code}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-500 truncate block">
+                              {item.registration.email} {item.registration.class_semester ? `· ${item.registration.class_semester}` : ""}
+                            </span>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-full inline-block">
+                              {item.timestamp}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================ */}
+        {/* TAB: EVENTS PARTICIPANTS LIST */}
+        {/* ================================================================ */}
+        {activeTab === "participants" && (
+          <div className="space-y-6">
+            {/* Header & Controls */}
+            <Card className="p-5 border border-slate-200 bg-white rounded-2xl shadow-xs space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900">Event Participants & Attendance</h2>
+                      <p className="text-xs text-slate-500">
+                        View student registrations, mark attendance without QR, and download verified attendance sheets.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions & Event Selector */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <select
+                    value={selectedParticipantEventId}
+                    onChange={(e) => setSelectedParticipantEventId(e.target.value)}
+                    className="h-9 px-3 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white font-medium max-w-[280px] sm:max-w-[340px] truncate"
+                  >
+                    {events.length === 0 && <option value="">No events found</option>}
+                    {events.map((evt) => (
+                      <option key={evt.id} value={evt.id}>
+                        {evt.title} {evt.registration_mode === "gform" ? "(G-Form)" : "(Onsite QR)"}{" "}
+                        {evt.created_by_id === user?.id ? "⭐ Your Event" : ""}
+                      </option>
+                    ))}
+                  </select>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadParticipantRegistrations(selectedParticipantEventId)}
+                    className="h-9 px-3 text-xs gap-1.5 border-slate-200 hover:bg-slate-50"
+                    title="Refresh participant registrations"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingParticipants ? "animate-spin" : ""}`} />
+                    <span>Refresh</span>
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    onClick={handleExportCsv}
+                    disabled={participantRegistrations.length === 0}
+                    className="h-9 px-3.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Summary KPI Strip */}
+              {(() => {
+                const total = participantRegistrations.length;
+                const attended = participantRegistrations.filter((r) => r.checked_in).length;
+                const pending = total - attended;
+                const rate = total > 0 ? Math.round((attended / total) * 100) : 0;
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                    <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Registered</span>
+                      <p className="text-xl font-extrabold text-slate-800 mt-0.5">{total}</p>
+                    </div>
+                    <div className="p-3 bg-emerald-50 border border-emerald-200/80 rounded-xl">
+                      <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Checked In / Present</span>
+                      <p className="text-xl font-extrabold text-emerald-800 mt-0.5">{attended}</p>
+                    </div>
+                    <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl">
+                      <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Pending Check-in</span>
+                      <p className="text-xl font-extrabold text-amber-800 mt-0.5">{pending}</p>
+                    </div>
+                    <div className="p-3 bg-blue-50 border border-blue-200/80 rounded-xl">
+                      <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Attendance Rate</span>
+                      <p className="text-xl font-extrabold text-blue-800 mt-0.5">{rate}%</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Search & Filter Strip */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <div className="relative w-full sm:w-80">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    value={participantSearch}
+                    onChange={(e) => setParticipantSearch(e.target.value)}
+                    placeholder="Search by student name, email, phone, ticket code..."
+                    className="pl-9 h-9 text-xs rounded-xl border-slate-200"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <Button
+                    variant={participantStatusFilter === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setParticipantStatusFilter("all")}
+                    className={`h-8 text-xs font-semibold ${participantStatusFilter === "all" ? "bg-slate-800 text-white" : ""}`}
+                  >
+                    All ({participantRegistrations.length})
+                  </Button>
+                  <Button
+                    variant={participantStatusFilter === "checked_in" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setParticipantStatusFilter("checked_in")}
+                    className={`h-8 text-xs font-semibold ${participantStatusFilter === "checked_in" ? "bg-emerald-600 text-white" : ""}`}
+                  >
+                    Present ({participantRegistrations.filter((r) => r.checked_in).length})
+                  </Button>
+                  <Button
+                    variant={participantStatusFilter === "pending" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setParticipantStatusFilter("pending")}
+                    className={`h-8 text-xs font-semibold ${participantStatusFilter === "pending" ? "bg-amber-600 text-white" : ""}`}
+                  >
+                    Pending ({participantRegistrations.filter((r) => !r.checked_in).length})
+                  </Button>
+                </div>
+              </div>
+            </Card>
+
+            {/* Participants Roster Table */}
+            {(() => {
+              const filtered = participantRegistrations.filter((reg) => {
+                const q = participantSearch.toLowerCase();
+                const matchesQuery =
+                  reg.full_name.toLowerCase().includes(q) ||
+                  reg.email.toLowerCase().includes(q) ||
+                  (reg.phone && reg.phone.toLowerCase().includes(q)) ||
+                  reg.ticket_code.toLowerCase().includes(q) ||
+                  (reg.class_semester && reg.class_semester.toLowerCase().includes(q));
+
+                const matchesStatus =
+                  participantStatusFilter === "all" ||
+                  (participantStatusFilter === "checked_in" && reg.checked_in) ||
+                  (participantStatusFilter === "pending" && !reg.checked_in);
+
+                return matchesQuery && matchesStatus;
+              });
+
+              return (
+                <Card className="border border-slate-200 bg-white rounded-2xl shadow-xs overflow-hidden">
+                  {loadingParticipants ? (
+                    <div className="p-12 text-center space-y-2">
+                      <Loader2 className="w-7 h-7 text-emerald-600 animate-spin mx-auto" />
+                      <p className="text-xs text-slate-500">Loading registrations...</p>
+                    </div>
+                  ) : filtered.length === 0 ? (
+                    <div className="p-12 text-center space-y-2">
+                      <Users className="w-10 h-10 text-slate-300 mx-auto" />
+                      <h3 className="text-sm font-bold text-slate-800">No participants found</h3>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        {participantSearch || participantStatusFilter !== "all"
+                          ? "Try clearing filters or search queries."
+                          : "No students have registered for this event yet."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                            <th className="py-3 px-4">Ticket Pass</th>
+                            <th className="py-3 px-4">Student</th>
+                            <th className="py-3 px-4">Class / Branch</th>
+                            <th className="py-3 px-4">Status</th>
+                            <th className="py-3 px-4">Check-in Time</th>
+                            <th className="py-3 px-4 text-right">Attendance Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filtered.map((reg) => (
+                            <tr key={reg.id} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[11px]">
+                                    {reg.ticket_code}
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(reg.ticket_code);
+                                      setCopiedTicketCode(reg.ticket_code);
+                                      setTimeout(() => setCopiedTicketCode(null), 2000);
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-slate-700 rounded"
+                                    title="Copy ticket code"
+                                  >
+                                    {copiedTicketCode === reg.ticket_code ? (
+                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-slate-900">{reg.full_name}</div>
+                                <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                  <Mail className="w-3 h-3 text-slate-400" />
+                                  <span>{reg.email}</span>
+                                  {reg.phone && (
+                                    <>
+                                      <span className="text-slate-300">·</span>
+                                      <Phone className="w-3 h-3 text-slate-400" />
+                                      <span>{reg.phone}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4 text-slate-700">
+                                {reg.class_semester || "—"}
+                              </td>
+
+                              <td className="py-3 px-4">
+                                {reg.checked_in ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>Present</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                    <Clock className="w-3 h-3" />
+                                    <span>Pending</span>
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-4 text-slate-500 text-[11px]">
+                                {reg.checked_in_at ? new Date(reg.checked_in_at).toLocaleTimeString() : "—"}
+                              </td>
+
+                              <td className="py-3 px-4 text-right">
+                                <Button
+                                  size="sm"
+                                  disabled={togglingAttendanceId === reg.id}
+                                  onClick={() => handleToggleAttendance(reg)}
+                                  className={`h-7 px-2.5 text-xs font-bold ${
+                                    reg.checked_in
+                                      ? "bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200"
+                                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                                  }`}
+                                >
+                                  {togglingAttendanceId === reg.id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : reg.checked_in ? (
+                                    <>
+                                      <UserX className="w-3 h-3 mr-1" />
+                                      <span>Mark Absent</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserCheck className="w-3 h-3 mr-1" />
+                                      <span>Mark Present</span>
+                                    </>
+                                  )}
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              );
+            })()}
           </div>
         )}
 
