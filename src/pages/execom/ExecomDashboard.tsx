@@ -231,9 +231,11 @@ export const ExecomDashboard: React.FC = () => {
     return false;
   };
 
-  const canManageEventAttendees = (_evt?: EventItem): boolean => {
-    // All ExeCom members and admins are authorized to scan QR passes and track attendance
-    return true;
+  const canManageEventAttendees = (evt?: EventItem | null): boolean => {
+    if (isAdmin) return true;
+    if (!evt || !user) return false;
+    // Only event creator, coordinator 1, coordinator 2, and admins can view/manage participants
+    return canEditEvent(evt);
   };
 
   const canApproveEvent = (evt: EventItem): boolean => {
@@ -312,6 +314,11 @@ export const ExecomDashboard: React.FC = () => {
 
   const loadParticipantRegistrations = async (eventId: string) => {
     if (!eventId) return;
+    const curEvt = events.find((e) => e.id === eventId);
+    if (!isAdmin && curEvt && !canManageEventAttendees(curEvt)) {
+      setParticipantRegistrations([]);
+      return;
+    }
     setLoadingParticipants(true);
     try {
       const data = await getEventRegistrations(eventId);
@@ -330,6 +337,11 @@ export const ExecomDashboard: React.FC = () => {
   }, [selectedParticipantEventId]);
 
   const handleToggleAttendance = async (reg: EventRegistration) => {
+    const curEvt = events.find((e) => e.id === selectedParticipantEventId);
+    if (!isAdmin && (!curEvt || !canManageEventAttendees(curEvt))) {
+      alert("Permission denied: Only the assigned event coordinators or administrators can mark attendance.");
+      return;
+    }
     setTogglingAttendanceId(reg.id);
     try {
       const nextChecked = !reg.checked_in;
@@ -427,9 +439,37 @@ export const ExecomDashboard: React.FC = () => {
     setVerifyingCode(true);
 
     try {
+      if (selectedScanEventId && !isAdmin) {
+        const targetEvt = events.find((e) => e.id === selectedScanEventId);
+        if (targetEvt && !canManageEventAttendees(targetEvt)) {
+          playBeepSound("error");
+          setScanResult({
+            type: "error",
+            title: "Access Restricted",
+            message: `Permission denied: You are not an assigned coordinator for "${targetEvt.title}". Only its coordinators or administrators can scan tickets.`,
+          });
+          setVerifyingCode(false);
+          isProcessingScanRef.current = false;
+          return;
+        }
+      }
+
       const res = await checkInAttendee(code, selectedScanEventId || undefined);
       if (res.success && res.registration) {
         const reg = res.registration;
+        const targetEvt = events.find((e) => e.id === reg.event_id);
+        if (!isAdmin && targetEvt && !canManageEventAttendees(targetEvt)) {
+          playBeepSound("error");
+          setScanResult({
+            type: "error",
+            title: "Access Restricted",
+            message: `Permission denied: Ticket belongs to "${targetEvt.title}". Only its assigned coordinators can check in attendees.`,
+          });
+          setVerifyingCode(false);
+          isProcessingScanRef.current = false;
+          return;
+        }
+
         const wasAlready =
           recentScans.some((s) => s.registration.id === reg.id) ||
           (reg.checked_in &&
@@ -659,13 +699,19 @@ export const ExecomDashboard: React.FC = () => {
       if (eventsData.length > 0) {
         const userEvent =
           eventsData.find(
-            (e) => (canManageEventAttendees(e) || e.created_by_id === user?.id) && e.registration_mode !== "gform"
+            (e) => canManageEventAttendees(e) && e.registration_mode !== "gform"
           ) ||
-          eventsData.find((e) => e.registration_mode !== "gform") ||
-          eventsData[0];
+          (isAdmin
+            ? eventsData.find((e) => e.registration_mode !== "gform") || eventsData[0]
+            : null);
 
-        setSelectedScanEventId((prev) => prev || userEvent.id);
-        setSelectedParticipantEventId((prev) => prev || userEvent.id);
+        if (userEvent) {
+          setSelectedScanEventId((prev) => prev || userEvent.id);
+          setSelectedParticipantEventId((prev) => prev || userEvent.id);
+        } else {
+          setSelectedScanEventId((prev) => prev || "");
+          setSelectedParticipantEventId((prev) => prev || "");
+        }
       }
     } catch (err) {
       console.error("Error loading ExeCom dashboard data:", err);
@@ -1590,27 +1636,39 @@ export const ExecomDashboard: React.FC = () => {
                 </div>
 
                 {/* Event Selector */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
-                    Selected Event:
-                  </label>
-                  <select
-                    value={selectedScanEventId}
-                    onChange={(e) => {
-                      setSelectedScanEventId(e.target.value);
-                      setScanResult(null);
-                    }}
-                    className="h-9 px-3 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white font-medium max-w-[280px] sm:max-w-[360px] truncate"
-                  >
-                    <option value="">⭐ All Active Events (Auto-Detect Ticket)</option>
-                    {events.map((evt) => (
-                      <option key={evt.id} value={evt.id}>
-                        {evt.title} {evt.registration_mode === "gform" ? "(G-Form)" : "(Onsite QR)"}{" "}
-                        {evt.created_by_id === user?.id ? "⭐ Your Event" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {(() => {
+                  const scannableEvents = isAdmin
+                    ? events
+                    : events.filter((e) => canManageEventAttendees(e));
+
+                  return (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
+                        Selected Event:
+                      </label>
+                      <select
+                        value={selectedScanEventId}
+                        onChange={(e) => {
+                          setSelectedScanEventId(e.target.value);
+                          setScanResult(null);
+                        }}
+                        className="h-9 px-3 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white font-medium max-w-[280px] sm:max-w-[360px] truncate"
+                      >
+                        <option value="">
+                          {isAdmin
+                            ? "⭐ All Active Events (Auto-Detect Ticket)"
+                            : "⭐ Your Assigned Events (Auto-Detect Ticket)"}
+                        </option>
+                        {scannableEvents.map((evt) => (
+                          <option key={evt.id} value={evt.id}>
+                            {evt.title} {evt.registration_mode === "gform" ? "(G-Form)" : "(Onsite QR)"}{" "}
+                            {evt.created_by_id === user?.id ? "⭐ Your Event" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
               </div>
             </Card>
 
@@ -1656,7 +1714,7 @@ export const ExecomDashboard: React.FC = () => {
                   {!isScanningCamera ? (
                     <Button
                       onClick={startCameraScanner}
-                      disabled={events.length === 0}
+                      disabled={isAdmin ? events.length === 0 : events.filter((e) => canManageEventAttendees(e)).length === 0}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 h-9 px-5 shadow-sm"
                     >
                       <Camera className="w-4 h-4" />
@@ -1849,18 +1907,28 @@ export const ExecomDashboard: React.FC = () => {
 
                 {/* Actions & Event Selector */}
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <select
-                    value={selectedParticipantEventId}
-                    onChange={(e) => setSelectedParticipantEventId(e.target.value)}
-                    className="h-9 px-3 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white font-medium max-w-[280px] sm:max-w-[340px] truncate"
-                  >
-                    {events.length === 0 && <option value="">No events found</option>}
-                    {events.map((evt) => (
-                      <option key={evt.id} value={evt.id}>
-                        {evt.title} {evt.registration_mode === "gform" ? "(G-Form)" : "(Onsite QR)"}
-                      </option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const participantEvents = isAdmin
+                      ? events
+                      : events.filter((e) => canManageEventAttendees(e));
+
+                    return (
+                      <select
+                        value={selectedParticipantEventId}
+                        onChange={(e) => setSelectedParticipantEventId(e.target.value)}
+                        className="h-9 px-3 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white font-medium max-w-[280px] sm:max-w-[340px] truncate"
+                      >
+                        {participantEvents.length === 0 && (
+                          <option value="">No events you coordinate</option>
+                        )}
+                        {participantEvents.map((evt) => (
+                          <option key={evt.id} value={evt.id}>
+                            {evt.title} {evt.registration_mode === "gform" ? "(G-Form)" : "(Onsite QR)"}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  })()}
 
                   <Button
                     variant="outline"
