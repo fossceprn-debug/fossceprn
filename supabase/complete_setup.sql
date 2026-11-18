@@ -280,15 +280,29 @@ ON CONFLICT (id) DO UPDATE SET public = true;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'storage' AND tablename = 'objects') THEN
-    EXECUTE 'ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY';
-    EXECUTE 'DROP POLICY IF EXISTS "Public can view storage objects" ON storage.objects';
-    EXECUTE 'CREATE POLICY "Public can view storage objects" ON storage.objects FOR SELECT USING (true)';
-    EXECUTE 'DROP POLICY IF EXISTS "Anyone can insert storage objects" ON storage.objects';
-    EXECUTE 'CREATE POLICY "Anyone can insert storage objects" ON storage.objects FOR INSERT WITH CHECK (true)';
-    EXECUTE 'DROP POLICY IF EXISTS "Anyone can update storage objects" ON storage.objects';
-    EXECUTE 'CREATE POLICY "Anyone can update storage objects" ON storage.objects FOR UPDATE USING (true)';
-    EXECUTE 'DROP POLICY IF EXISTS "Anyone can delete storage objects" ON storage.objects';
-    EXECUTE 'CREATE POLICY "Anyone can delete storage objects" ON storage.objects FOR DELETE USING (true)';
+    BEGIN
+      DROP POLICY IF EXISTS "Public can view storage objects" ON storage.objects;
+      CREATE POLICY "Public can view storage objects" ON storage.objects FOR SELECT USING (true);
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+
+    BEGIN
+      DROP POLICY IF EXISTS "Anyone can insert storage objects" ON storage.objects;
+      CREATE POLICY "Anyone can insert storage objects" ON storage.objects FOR INSERT WITH CHECK (true);
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+
+    BEGIN
+      DROP POLICY IF EXISTS "Anyone can update storage objects" ON storage.objects;
+      CREATE POLICY "Anyone can update storage objects" ON storage.objects FOR UPDATE USING (true);
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+
+    BEGIN
+      DROP POLICY IF EXISTS "Anyone can delete storage objects" ON storage.objects;
+      CREATE POLICY "Anyone can delete storage objects" ON storage.objects FOR DELETE USING (true);
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
   END IF;
 END $$;
 
