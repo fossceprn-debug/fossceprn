@@ -545,12 +545,15 @@ Login URL: ${window.location.origin}${loginPath} (or ${window.location.origin}/a
 
       // 2. Provision credentials if enabled
       if (provisionOnAccept) {
+        const isFaculty =
+          app.desired_role?.toLowerCase().includes("faculty") ||
+          app.desired_role?.toLowerCase().includes("staff advisor");
         await provisionExecomCredentials({
           execomId: newMember.id,
           fullName: app.full_name,
           email: app.email,
           password: acceptPassword,
-          role: "editor",
+          role: isFaculty ? "faculty" : "editor",
         });
       }
 

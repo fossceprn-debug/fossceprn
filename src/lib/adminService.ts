@@ -420,12 +420,15 @@ export async function getAllExecomAdmin(): Promise<ExecomMember[]> {
 export async function createExecomMember(member: Partial<ExecomMember>): Promise<ExecomMember> {
   const { login_password: newPassword, role: memberRole, ...standardFields } = member;
 
-  const determinedRole: AdminRole = memberRole || (
+  const isFaculty =
+    memberRole === "faculty" ||
     standardFields.designation?.toLowerCase().includes("faculty") ||
-    standardFields.designation?.toLowerCase().includes("staff advisor")
-      ? "faculty"
-      : "editor"
-  );
+    standardFields.designation?.toLowerCase().includes("staff advisor");
+
+  const determinedRole: AdminRole = isFaculty ? "faculty" : (memberRole || "editor");
+  const finalPassword =
+    newPassword ||
+    `Foss@${Math.random().toString(36).substring(2, 8)}${Math.floor(100 + Math.random() * 900)}`;
 
   const insertPayload: any = {
     full_name: standardFields.full_name,
@@ -439,6 +442,7 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
     display_order: standardFields.display_order ?? 0,
     is_active: standardFields.is_active ?? true,
     role: determinedRole,
+    login_password: finalPassword,
   };
 
   if (standardFields.phone_number !== undefined) {
@@ -460,10 +464,17 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
     error = err;
   }
 
-  // Retry without phone_number or role if columns not cached in PostgREST yet
-  if (error && error.message && (error.message.includes("phone_number") || error.message.includes("role"))) {
+  // Retry without phone_number, role or login_password if columns not cached in PostgREST yet
+  if (
+    error &&
+    error.message &&
+    (error.message.includes("phone_number") ||
+      error.message.includes("role") ||
+      error.message.includes("login_password"))
+  ) {
     if (error.message.includes("phone_number")) delete insertPayload.phone_number;
     if (error.message.includes("role")) delete insertPayload.role;
+    if (error.message.includes("login_password")) delete insertPayload.login_password;
     const retryRes = await supabase
       .from("execom_members")
       .insert([insertPayload])
@@ -475,13 +486,14 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
 
   if (error) throw error;
 
-  if (data?.id && data.email && newPassword) {
+  const activeEmail = data?.email || standardFields.email;
+  if (data?.id && activeEmail) {
     try {
       await provisionExecomCredentials({
         execomId: data.id,
         fullName: data.full_name,
-        email: data.email,
-        password: newPassword,
+        email: activeEmail,
+        password: finalPassword,
         role: determinedRole,
       });
     } catch (e) {
@@ -493,7 +505,7 @@ export async function createExecomMember(member: Partial<ExecomMember>): Promise
     name: data.full_name,
     role: data.designation,
   });
-  return data;
+  return { ...data, role: determinedRole, login_password: finalPassword };
 }
 
 export async function updateExecomMember(
@@ -502,17 +514,21 @@ export async function updateExecomMember(
 ): Promise<ExecomMember> {
   const { login_password: newPassword, role: memberRole, ...standardUpdates } = updates;
 
-  const determinedRole: AdminRole = memberRole || (
+  const isFaculty =
+    memberRole === "faculty" ||
     standardUpdates.designation?.toLowerCase().includes("faculty") ||
-    standardUpdates.designation?.toLowerCase().includes("staff advisor")
-      ? "faculty"
-      : "editor"
-  );
+    standardUpdates.designation?.toLowerCase().includes("staff advisor");
+
+  const determinedRole: AdminRole = isFaculty ? "faculty" : (memberRole || "editor");
 
   const updatePayload: any = {
     ...standardUpdates,
     role: determinedRole,
   };
+
+  if (newPassword) {
+    updatePayload.login_password = newPassword;
+  }
 
   let data: any;
   let error: any;
@@ -530,11 +546,18 @@ export async function updateExecomMember(
     error = err;
   }
 
-  // Retry without phone_number or role if columns not cached in PostgREST yet
-  if (error && error.message && (error.message.includes("phone_number") || error.message.includes("role"))) {
+  // Retry without phone_number, role or login_password if columns not cached in PostgREST yet
+  if (
+    error &&
+    error.message &&
+    (error.message.includes("phone_number") ||
+      error.message.includes("role") ||
+      error.message.includes("login_password"))
+  ) {
     const cleanUpdates = { ...updatePayload };
     if (error.message.includes("phone_number")) delete cleanUpdates.phone_number;
     if (error.message.includes("role")) delete cleanUpdates.role;
+    if (error.message.includes("login_password")) delete cleanUpdates.login_password;
     const retryRes = await supabase
       .from("execom_members")
       .update(cleanUpdates)
@@ -547,7 +570,7 @@ export async function updateExecomMember(
 
   if (error) throw error;
 
-  const activeEmail = standardUpdates.email || data.email;
+  const activeEmail = standardUpdates.email || data?.email;
   if (data?.id && activeEmail && newPassword) {
     try {
       await provisionExecomCredentials({
@@ -565,7 +588,7 @@ export async function updateExecomMember(
   await logActivity("Updated Execom Member", "execom_member", id, {
     updates: Object.keys(standardUpdates),
   });
-  return data;
+  return { ...data, role: determinedRole, login_password: newPassword || data?.login_password };
 }
 
 export async function deleteExecomMember(id: string): Promise<void> {
@@ -1438,26 +1461,60 @@ export async function promoteApplicationToExecom(
     .select("id", { count: "exact" });
 
   const nextOrder = (count || 0) + 1;
+  const isFaculty =
+    application.desired_role?.toLowerCase().includes("faculty") ||
+    application.desired_role?.toLowerCase().includes("staff advisor");
+  const determinedRole: AdminRole = isFaculty ? "faculty" : "editor";
+  const autoPassword = `Foss@${Math.random().toString(36).substring(2, 8)}${Math.floor(100 + Math.random() * 900)}`;
 
   // 2. Insert into execom_members
-  const { data: member, error: insertError } = await supabase
-    .from("execom_members")
-    .insert([
-      {
-        full_name: application.full_name,
-        designation: application.desired_role,
-        department: application.department,
-        semester: application.semester,
-        email: application.email,
-        photo_url: null,
-        github_url: application.github_url || null,
-        linkedin_url: application.linkedin_url || null,
-        display_order: nextOrder,
-        is_active: true,
-      },
-    ])
-    .select()
-    .single();
+  const insertPayload: any = {
+    full_name: application.full_name,
+    designation: application.desired_role,
+    department: application.department,
+    semester: application.semester,
+    email: application.email,
+    photo_url: null,
+    github_url: application.github_url || null,
+    linkedin_url: application.linkedin_url || null,
+    display_order: nextOrder,
+    is_active: true,
+    role: determinedRole,
+    login_password: autoPassword,
+  };
+
+  let member: any;
+  let insertError: any;
+
+  try {
+    const res = await supabase
+      .from("execom_members")
+      .insert([insertPayload])
+      .select()
+      .single();
+    member = res.data;
+    insertError = res.error;
+  } catch (err: any) {
+    insertError = err;
+  }
+
+  // Fallback retry if schema column caching is lagging
+  if (
+    insertError &&
+    insertError.message &&
+    (insertError.message.includes("role") || insertError.message.includes("login_password"))
+  ) {
+    const fallbackPayload = { ...insertPayload };
+    delete fallbackPayload.role;
+    delete fallbackPayload.login_password;
+    const retryRes = await supabase
+      .from("execom_members")
+      .insert([fallbackPayload])
+      .select()
+      .single();
+    member = retryRes.data;
+    insertError = retryRes.error;
+  }
 
   if (insertError) throw insertError;
 
@@ -1525,15 +1582,19 @@ export async function provisionExecomCredentials(params: {
     };
   }
 
-  // 2. Safely update execom_members email if execomId is provided
+  // 2. Safely update execom_members email, role and password if execomId is provided
   if (params.execomId) {
     try {
       await supabase
         .from("execom_members")
-        .update({ email: cleanEmail })
+        .update({
+          email: cleanEmail,
+          role: params.role,
+          login_password: params.password,
+        })
         .eq("id", params.execomId);
     } catch (e) {
-      console.warn("Could not update execom_members email:", e);
+      console.warn("Could not update execom_members email/role/password:", e);
     }
   }
 
@@ -1643,7 +1704,12 @@ export async function provisionExecomCredentials(params: {
       if (params.execomId) {
         await supabase
           .from("execom_members")
-          .update({ user_id: userId, email: cleanEmail })
+          .update({
+            user_id: userId,
+            email: cleanEmail,
+            role: params.role,
+            login_password: params.password,
+          })
           .eq("id", params.execomId);
       }
     }
