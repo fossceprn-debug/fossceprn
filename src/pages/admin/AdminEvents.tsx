@@ -167,6 +167,37 @@ export const AdminEvents: React.FC = () => {
 
   const handleOpenEdit = (evt: EventItem) => {
     setEditingEvent(evt);
+
+    // Robust matching for Coordinator 1
+    const foundC1 = execomMembers.find(
+      (m) =>
+        (evt.coordinator1_id && m.id === evt.coordinator1_id) ||
+        (evt.coordinator1_name && m.full_name.trim().toLowerCase() === evt.coordinator1_name.trim().toLowerCase()) ||
+        (evt.coordinator_name && m.full_name.trim().toLowerCase() === evt.coordinator_name.trim().toLowerCase())
+    );
+    const c1Name = foundC1 ? foundC1.full_name : (evt.coordinator1_name || evt.coordinator_name || "");
+    const c1Id = foundC1 ? foundC1.id : (evt.coordinator1_id || "");
+    const c1Phone = evt.coordinator1_phone || evt.coordinator_phone || (foundC1 as any)?.phone_number || "";
+
+    // Robust matching for Coordinator 2
+    const foundC2 = execomMembers.find(
+      (m) =>
+        (evt.coordinator2_id && m.id === evt.coordinator2_id) ||
+        (evt.coordinator2_name && m.full_name.trim().toLowerCase() === evt.coordinator2_name.trim().toLowerCase())
+    );
+    const c2Name = foundC2 ? foundC2.full_name : (evt.coordinator2_name || "");
+    const c2Id = foundC2 ? foundC2.id : (evt.coordinator2_id || "");
+    const c2Phone = evt.coordinator2_phone || (foundC2 as any)?.phone_number || "";
+    const c2Type = foundC2 || (!evt.coordinator2_name && !evt.coordinator2_id) ? "execom" : "external";
+
+    // Matching for Volunteers
+    const isV1Execom = execomMembers.some(
+      (m) => evt.volunteer1_name && m.full_name.trim().toLowerCase() === evt.volunteer1_name.trim().toLowerCase()
+    );
+    const isV2Execom = execomMembers.some(
+      (m) => evt.volunteer2_name && m.full_name.trim().toLowerCase() === evt.volunteer2_name.trim().toLowerCase()
+    );
+
     setFormData({
       title: evt.title,
       slug: evt.slug,
@@ -182,17 +213,17 @@ export const AdminEvents: React.FC = () => {
       registration_questions: evt.registration_questions || [],
       coordinator_name: evt.coordinator_name || "",
       coordinator_phone: evt.coordinator_phone || "",
-      coordinator1_name: evt.coordinator1_name || evt.coordinator_name || "",
-      coordinator1_id: evt.coordinator1_id || "",
-      coordinator1_phone: evt.coordinator1_phone || evt.coordinator_phone || "",
-      coordinator2_name: evt.coordinator2_name || "",
-      coordinator2_id: evt.coordinator2_id || "",
-      coordinator2_phone: evt.coordinator2_phone || "",
-      coordinator2_type: evt.coordinator2_id ? "execom" : "external",
+      coordinator1_name: c1Name,
+      coordinator1_id: c1Id,
+      coordinator1_phone: c1Phone,
+      coordinator2_name: c2Name,
+      coordinator2_id: c2Id,
+      coordinator2_phone: c2Phone,
+      coordinator2_type: c2Type,
       volunteer1_name: evt.volunteer1_name || "",
-      volunteer1_type: execomMembers.some((m) => m.full_name === evt.volunteer1_name) ? "execom" : "external",
+      volunteer1_type: isV1Execom || !evt.volunteer1_name ? "execom" : "external",
       volunteer2_name: evt.volunteer2_name || "",
-      volunteer2_type: execomMembers.some((m) => m.full_name === evt.volunteer2_name) ? "execom" : "external",
+      volunteer2_type: isV2Execom || !evt.volunteer2_name ? "execom" : "external",
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -241,8 +272,9 @@ export const AdminEvents: React.FC = () => {
       const combinedCoords = [formData.coordinator1_name, formData.coordinator2_name].filter(Boolean).join(", ");
       const combinedPhones = formData.coordinator1_phone || formData.coordinator2_phone || "";
 
+      const { coordinator2_type, volunteer1_type, volunteer2_type, ...cleanForm } = formData;
       const payload = {
-        ...formData,
+        ...cleanForm,
         coordinator_name: combinedCoords,
         coordinator_phone: combinedPhones,
         start_date: new Date(formData.start_date).toISOString(),
@@ -255,7 +287,7 @@ export const AdminEvents: React.FC = () => {
         await createEventAdmin(payload);
       }
       setModalOpen(false);
-      loadData();
+      await loadData();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to save event.");
     } finally {
@@ -700,7 +732,7 @@ export const AdminEvents: React.FC = () => {
                   </div>
                   <select
                     required
-                    value={formData.coordinator1_id || formData.coordinator1_name}
+                    value={formData.coordinator1_id || (execomMembers.find(m => m.full_name === formData.coordinator1_name)?.id || "")}
                     onChange={(e) => {
                       const sel = execomMembers.find(
                         (m) => m.id === e.target.value || m.full_name === e.target.value
@@ -715,7 +747,7 @@ export const AdminEvents: React.FC = () => {
                       } else {
                         setFormData((prev) => ({
                           ...prev,
-                          coordinator1_name: e.target.value,
+                          coordinator1_name: "",
                           coordinator1_id: "",
                         }));
                       }
@@ -776,7 +808,7 @@ export const AdminEvents: React.FC = () => {
 
                   {formData.coordinator2_type === "execom" ? (
                     <select
-                      value={formData.coordinator2_id || formData.coordinator2_name}
+                      value={formData.coordinator2_id || (execomMembers.find(m => m.full_name === formData.coordinator2_name)?.id || "")}
                       onChange={(e) => {
                         const sel = execomMembers.find(
                           (m) => m.id === e.target.value || m.full_name === e.target.value

@@ -1811,6 +1811,9 @@ ALTER TABLE public.events
   ADD COLUMN IF NOT EXISTS volunteer1_name TEXT,
   ADD COLUMN IF NOT EXISTS volunteer2_name TEXT;
 
+-- Reload Supabase PostgREST schema cache
+NOTIFY pgrst, 'reload schema';
+
 -- ============================================================================
 -- END OF SETUP
 -- All ExeCom coordinators, events, and members are managed dynamically via

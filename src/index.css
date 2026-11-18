@@ -44,9 +44,21 @@
     @apply border-border;
   }
 
-  html {
+  html, body {
     scroll-behavior: smooth;
     color-scheme: light;
+    overflow-x: hidden;
+    max-width: 100%;
+    width: 100%;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root {
+    overflow-x: hidden;
+    max-width: 100%;
+    width: 100%;
+    min-height: 100vh;
   }
 
   body {

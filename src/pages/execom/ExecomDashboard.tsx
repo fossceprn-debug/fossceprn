@@ -231,8 +231,31 @@ export const ExecomDashboard: React.FC = () => {
     return false;
   };
 
-  const canManageEventAttendees = (evt: EventItem): boolean => {
-    return canEditEvent(evt);
+  const canManageEventAttendees = (_evt?: EventItem): boolean => {
+    // All ExeCom members and admins are authorized to scan QR passes and track attendance
+    return true;
+  };
+
+  const canApproveEvent = (evt: EventItem): boolean => {
+    if (isAdmin) return true;
+    if (!user) return false;
+    const userEmail = (user.email || "").toLowerCase().trim();
+    const userName = (user.full_name || "").toLowerCase().trim();
+    const userId = user.id;
+
+    // Assigned Coordinator 1
+    if (evt.coordinator1_id && evt.coordinator1_id === userId) return true;
+    if (evt.coordinator1_name && (evt.coordinator1_name.toLowerCase().trim() === userName || evt.coordinator1_name.toLowerCase().trim() === userEmail)) return true;
+
+    // Assigned Coordinator 2
+    if (evt.coordinator2_id && evt.coordinator2_id === userId) return true;
+    if (evt.coordinator2_name && (evt.coordinator2_name.toLowerCase().trim() === userName || evt.coordinator2_name.toLowerCase().trim() === userEmail)) return true;
+
+    // Event Creator
+    if (evt.created_by_id && evt.created_by_id === userId) return true;
+    if (evt.created_by && (evt.created_by.toLowerCase().trim() === userName || evt.created_by.toLowerCase().trim() === userEmail)) return true;
+
+    return false;
   };
 
   // --------------------------------------------------------------------------
@@ -271,10 +294,14 @@ export const ExecomDashboard: React.FC = () => {
   const [copiedTicketCode, setCopiedTicketCode] = useState<string | null>(null);
 
   const handleApproveEvent = async (evt: EventItem) => {
+    if (!canApproveEvent(evt)) {
+      setEventError("Permission denied: Only event coordinators and administrators can approve this event.");
+      return;
+    }
     try {
       await updateEventAdmin(evt.id, {
         publication_status: "published",
-        approved_by: user?.full_name || user?.email || "Admin",
+        approved_by: user?.full_name || user?.email || (isAdmin ? "Admin" : "Coordinator"),
         approved_at: new Date().toISOString(),
       });
       await loadData();
@@ -700,6 +727,37 @@ export const ExecomDashboard: React.FC = () => {
       return;
     }
     setEditingEvent(evt);
+
+    // Robust matching for Coordinator 1
+    const foundC1 = execomMembers.find(
+      (m) =>
+        (evt.coordinator1_id && m.id === evt.coordinator1_id) ||
+        (evt.coordinator1_name && m.full_name.trim().toLowerCase() === evt.coordinator1_name.trim().toLowerCase()) ||
+        (evt.coordinator_name && m.full_name.trim().toLowerCase() === evt.coordinator_name.trim().toLowerCase())
+    );
+    const c1Name = foundC1 ? foundC1.full_name : (evt.coordinator1_name || evt.coordinator_name || "");
+    const c1Id = foundC1 ? foundC1.id : (evt.coordinator1_id || "");
+    const c1Phone = evt.coordinator1_phone || evt.coordinator_phone || (foundC1 as any)?.phone_number || "";
+
+    // Robust matching for Coordinator 2
+    const foundC2 = execomMembers.find(
+      (m) =>
+        (evt.coordinator2_id && m.id === evt.coordinator2_id) ||
+        (evt.coordinator2_name && m.full_name.trim().toLowerCase() === evt.coordinator2_name.trim().toLowerCase())
+    );
+    const c2Name = foundC2 ? foundC2.full_name : (evt.coordinator2_name || "");
+    const c2Id = foundC2 ? foundC2.id : (evt.coordinator2_id || "");
+    const c2Phone = evt.coordinator2_phone || (foundC2 as any)?.phone_number || "";
+    const c2Type = foundC2 || (!evt.coordinator2_name && !evt.coordinator2_id) ? "execom" : "external";
+
+    // Matching for Volunteers
+    const isV1Execom = execomMembers.some(
+      (m) => evt.volunteer1_name && m.full_name.trim().toLowerCase() === evt.volunteer1_name.trim().toLowerCase()
+    );
+    const isV2Execom = execomMembers.some(
+      (m) => evt.volunteer2_name && m.full_name.trim().toLowerCase() === evt.volunteer2_name.trim().toLowerCase()
+    );
+
     setEventForm({
       title: evt.title,
       slug: evt.slug,
@@ -715,17 +773,17 @@ export const ExecomDashboard: React.FC = () => {
       registration_questions: evt.registration_questions || [],
       coordinator_name: evt.coordinator_name || "",
       coordinator_phone: evt.coordinator_phone || "",
-      coordinator1_name: evt.coordinator1_name || evt.coordinator_name || "",
-      coordinator1_id: evt.coordinator1_id || "",
-      coordinator1_phone: evt.coordinator1_phone || evt.coordinator_phone || "",
-      coordinator2_name: evt.coordinator2_name || "",
-      coordinator2_id: evt.coordinator2_id || "",
-      coordinator2_phone: evt.coordinator2_phone || "",
-      coordinator2_type: evt.coordinator2_id ? "execom" : "external",
+      coordinator1_name: c1Name,
+      coordinator1_id: c1Id,
+      coordinator1_phone: c1Phone,
+      coordinator2_name: c2Name,
+      coordinator2_id: c2Id,
+      coordinator2_phone: c2Phone,
+      coordinator2_type: c2Type,
       volunteer1_name: evt.volunteer1_name || "",
-      volunteer1_type: execomMembers.some((m) => m.full_name === evt.volunteer1_name) ? "execom" : "external",
+      volunteer1_type: isV1Execom || !evt.volunteer1_name ? "execom" : "external",
       volunteer2_name: evt.volunteer2_name || "",
-      volunteer2_type: execomMembers.some((m) => m.full_name === evt.volunteer2_name) ? "execom" : "external",
+      volunteer2_type: isV2Execom || !evt.volunteer2_name ? "execom" : "external",
       created_by: evt.created_by || user?.full_name || user?.email || "",
       created_by_id: evt.created_by_id || user?.id || null,
     });
@@ -794,8 +852,9 @@ export const ExecomDashboard: React.FC = () => {
       const combinedCoords = [eventForm.coordinator1_name, eventForm.coordinator2_name].filter(Boolean).join(", ");
       const combinedPhones = eventForm.coordinator1_phone || eventForm.coordinator2_phone || "";
 
+      const { coordinator2_type, volunteer1_type, volunteer2_type, ...cleanForm } = eventForm;
       const finalPayload = {
-        ...eventForm,
+        ...cleanForm,
         coordinator_name: combinedCoords,
         coordinator_phone: combinedPhones,
         // Non-admin members cannot directly publish events: require Admin/Super Admin approval
@@ -845,62 +904,63 @@ export const ExecomDashboard: React.FC = () => {
   const departments = Array.from(new Set(execomMembers.map((m) => m.department))).filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 antialiased selection:bg-emerald-100 selection:text-emerald-900 flex flex-col">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 antialiased selection:bg-emerald-100 selection:text-emerald-900 flex flex-col w-full max-w-full overflow-x-hidden">
       {/* ------------------------------------------------------------------ */}
       {/* TOP HEADER BAR */}
       {/* ------------------------------------------------------------------ */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-xs">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-xs w-full max-w-full">
+        <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand & Portal Title */}
-          <div className="flex items-center gap-3">
-            <Link to="/" className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Link to="/" className="flex items-center gap-2 shrink-0">
               <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-extrabold text-sm shadow-xs">
                 F
               </div>
-              <div className="flex flex-col">
-                <span className="font-extrabold text-sm text-slate-900 tracking-tight leading-none">
+              <div className="flex flex-col min-w-0">
+                <span className="font-extrabold text-sm text-slate-900 tracking-tight leading-none truncate">
                   FOSS CEPrn
                 </span>
-                <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mt-0.5">
-                  ExeCom Member Dashboard
+                <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mt-0.5 truncate">
+                  ExeCom Dashboard
                 </span>
               </div>
             </Link>
 
             <span className="hidden sm:inline-block h-4 w-px bg-slate-200 mx-1" />
 
-            <Badge variant="outline" className="hidden sm:inline-flex bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold py-0.5 px-2">
-              EXECOM MEMBER DASHBOARD
+            <Badge variant="outline" className="hidden lg:inline-flex bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold py-0.5 px-2">
+              EXECOM DASHBOARD
             </Badge>
           </div>
 
           {/* Right User Bar & Actions */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* Quick QR Scanner Button */}
             <Button
               onClick={() => setActiveTab("scanner")}
               variant="outline"
               size="sm"
-              className="hidden sm:inline-flex text-xs h-8 gap-1.5 border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-bold"
+              className="text-xs h-8 gap-1 sm:gap-1.5 border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-bold px-2.5 sm:px-3"
               title="Launch Live Event QR Scanner"
             >
-              <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+              <QrCode className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Scan QR</span>
             </Button>
 
             {/* If Admin, allow quick toggle */}
             {isAdmin && (
-              <Button asChild variant="outline" size="sm" className="hidden md:inline-flex text-xs h-8 gap-1.5 border-slate-300">
+              <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex text-xs h-8 gap-1.5 border-slate-300">
                 <Link to="/admin">
                   <Shield className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Admin Console</span>
+                  <span>Admin</span>
                 </Link>
               </Button>
             )}
 
-            <Button asChild variant="ghost" size="sm" className="text-xs h-8 text-slate-600 hover:text-slate-900 gap-1.5">
+            <Button asChild variant="ghost" size="sm" className="text-xs h-8 text-slate-600 hover:text-slate-900 gap-1 px-2 sm:px-3">
               <Link to="/">
-                <span>Public Site</span>
+                <span className="hidden sm:inline">Public Site</span>
+                <span className="sm:hidden text-[11px]">Site</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </Link>
             </Button>
@@ -908,7 +968,7 @@ export const ExecomDashboard: React.FC = () => {
             <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
             {/* User Info */}
-            <div className="hidden sm:flex items-center gap-2 px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+            <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs">
               <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[11px]">
                 {user?.full_name ? user.full_name[0].toUpperCase() : "E"}
               </div>
@@ -924,7 +984,7 @@ export const ExecomDashboard: React.FC = () => {
                 await logout();
                 navigate("/login");
               }}
-              className="text-xs h-8 text-slate-500 hover:text-rose-600 hover:bg-rose-50 gap-1"
+              className="text-xs h-8 text-slate-500 hover:text-rose-600 hover:bg-rose-50 gap-1 px-2"
               title="Sign Out"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -934,8 +994,8 @@ export const ExecomDashboard: React.FC = () => {
         </div>
 
         {/* Tab Navigation Navigation Strip */}
-        <div className="bg-slate-50/80 border-t border-slate-200/60 px-4 sm:px-6 lg:px-8">
-          <div className="container mx-auto flex items-center gap-2 overflow-x-auto py-2">
+        <div className="bg-slate-50/80 border-t border-slate-200/60 px-3 sm:px-6 lg:px-8 w-full max-w-full overflow-x-hidden">
+          <div className="w-full max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
             <button
               onClick={() => setActiveTab("events")}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -1029,7 +1089,7 @@ export const ExecomDashboard: React.FC = () => {
       {/* ------------------------------------------------------------------ */}
       {/* MAIN CONTENT AREA */}
       {/* ------------------------------------------------------------------ */}
-      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-6 overflow-x-hidden">
         {/* Welcome Callout Banner */}
         <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -1419,8 +1479,8 @@ export const ExecomDashboard: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        {/* Admin One-click Approval */}
-                        {isAdmin && evt.publication_status === "pending_approval" && (
+                        {/* Coordinators & Admins Approval */}
+                        {canApproveEvent(evt) && evt.publication_status === "pending_approval" && (
                           <Button
                             size="sm"
                             onClick={() => handleApproveEvent(evt)}
@@ -1795,14 +1855,11 @@ export const ExecomDashboard: React.FC = () => {
                     className="h-9 px-3 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white font-medium max-w-[280px] sm:max-w-[340px] truncate"
                   >
                     {events.length === 0 && <option value="">No events found</option>}
-                    {events.map((evt) => {
-                      const isAllowed = canManageEventAttendees(evt);
-                      return (
-                        <option key={evt.id} value={evt.id}>
-                          {evt.title} {isAllowed ? "⭐ (Your Event)" : "🔒 (Restricted)"}
-                        </option>
-                      );
-                    })}
+                    {events.map((evt) => (
+                      <option key={evt.id} value={evt.id}>
+                        {evt.title} {evt.registration_mode === "gform" ? "(G-Form)" : "(Onsite QR)"}
+                      </option>
+                    ))}
                   </select>
 
                   <Button
@@ -2492,7 +2549,7 @@ export const ExecomDashboard: React.FC = () => {
                   </div>
                   <select
                     required
-                    value={eventForm.coordinator1_id || eventForm.coordinator1_name}
+                    value={eventForm.coordinator1_id || (execomMembers.find(m => m.full_name === eventForm.coordinator1_name)?.id || "")}
                     onChange={(e) => {
                       const sel = execomMembers.find(
                         (m) => m.id === e.target.value || m.full_name === e.target.value
@@ -2507,7 +2564,7 @@ export const ExecomDashboard: React.FC = () => {
                       } else {
                         setEventForm((prev) => ({
                           ...prev,
-                          coordinator1_name: e.target.value,
+                          coordinator1_name: "",
                           coordinator1_id: "",
                         }));
                       }
@@ -2568,7 +2625,7 @@ export const ExecomDashboard: React.FC = () => {
 
                   {eventForm.coordinator2_type === "execom" ? (
                     <select
-                      value={eventForm.coordinator2_id || eventForm.coordinator2_name}
+                      value={eventForm.coordinator2_id || (execomMembers.find(m => m.full_name === eventForm.coordinator2_name)?.id || "")}
                       onChange={(e) => {
                         const sel = execomMembers.find(
                           (m) => m.id === e.target.value || m.full_name === e.target.value

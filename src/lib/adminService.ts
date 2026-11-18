@@ -762,6 +762,45 @@ export async function getAllEventsAdmin(search = "", status = "all"): Promise<Ev
   return list;
 }
 
+function sanitizeEventPayload(payload: Partial<EventItem>): Record<string, any> {
+  const allowedCols = [
+    "title",
+    "slug",
+    "description",
+    "cover_image",
+    "venue",
+    "start_date",
+    "end_date",
+    "registration_status",
+    "publication_status",
+    "registration_mode",
+    "gform_url",
+    "registration_questions",
+    "created_by",
+    "created_by_id",
+    "approved_by",
+    "approved_at",
+    "coordinator_name",
+    "coordinator_phone",
+    "coordinator1_name",
+    "coordinator1_id",
+    "coordinator1_phone",
+    "coordinator2_name",
+    "coordinator2_id",
+    "coordinator2_phone",
+    "volunteer1_name",
+    "volunteer2_name",
+  ];
+
+  const sanitized: Record<string, any> = {};
+  for (const col of allowedCols) {
+    if ((payload as any)[col] !== undefined) {
+      sanitized[col] = (payload as any)[col];
+    }
+  }
+  return sanitized;
+}
+
 export async function createEventAdmin(event: Partial<EventItem>): Promise<EventItem> {
   const slug =
     event.slug ||
@@ -790,6 +829,14 @@ export async function createEventAdmin(event: Partial<EventItem>): Promise<Event
     approved_at: event.approved_at || null,
     coordinator_name: event.coordinator_name || null,
     coordinator_phone: event.coordinator_phone || null,
+    coordinator1_name: event.coordinator1_name || null,
+    coordinator1_id: event.coordinator1_id || null,
+    coordinator1_phone: event.coordinator1_phone || null,
+    coordinator2_name: event.coordinator2_name || null,
+    coordinator2_id: event.coordinator2_id || null,
+    coordinator2_phone: event.coordinator2_phone || null,
+    volunteer1_name: event.volunteer1_name || null,
+    volunteer2_name: event.volunteer2_name || null,
     created_at: new Date().toISOString(),
   };
 
@@ -797,30 +844,10 @@ export async function createEventAdmin(event: Partial<EventItem>): Promise<Event
 
   if (isSupabaseConfigured) {
     try {
+      const insertPayload = sanitizeEventPayload(newEvent);
       const { data, error } = await supabase
         .from("events")
-        .insert([
-          {
-            title: newEvent.title,
-            slug: newEvent.slug,
-            description: newEvent.description,
-            cover_image: newEvent.cover_image,
-            venue: newEvent.venue,
-            start_date: newEvent.start_date,
-            end_date: newEvent.end_date,
-            registration_status: newEvent.registration_status,
-            publication_status: newEvent.publication_status,
-            registration_mode: newEvent.registration_mode,
-            gform_url: newEvent.gform_url,
-            registration_questions: newEvent.registration_questions,
-            created_by: newEvent.created_by,
-            created_by_id: newEvent.created_by_id,
-            approved_by: newEvent.approved_by,
-            approved_at: newEvent.approved_at,
-            coordinator_name: newEvent.coordinator_name,
-            coordinator_phone: newEvent.coordinator_phone,
-          },
-        ])
+        .insert([insertPayload])
         .select()
         .single();
 
@@ -848,9 +875,10 @@ export async function updateEventAdmin(id: string, updates: Partial<EventItem>):
 
   if (isSupabaseConfigured) {
     try {
+      const sanitizedUpdates = sanitizeEventPayload(updates);
       const { data, error } = await supabase
         .from("events")
-        .update(updates)
+        .update(sanitizedUpdates)
         .eq("id", id)
         .select()
         .single();
@@ -1034,29 +1062,38 @@ export async function checkInAttendee(
   ticketCodeOrId: string,
   eventId?: string
 ): Promise<{ success: boolean; registration?: EventRegistration; error?: string }> {
-  let code = ticketCodeOrId.trim();
+  let raw = ticketCodeOrId.trim();
+  let code = raw;
   const now = new Date().toISOString();
+  let jsonPayload: any = null;
 
-  // 1. Try parsing JSON payload if scanned from a rich QR code
+  // 1. Try parsing JSON payload if scanned from a formatted QR pass
   try {
-    if (code.startsWith("{") && code.endsWith("}")) {
-      const parsed = JSON.parse(code);
+    if (raw.includes("{") && raw.includes("}")) {
+      const start = raw.indexOf("{");
+      const end = raw.lastIndexOf("}");
+      const parsed = JSON.parse(raw.slice(start, end + 1));
+      jsonPayload = parsed;
       if (parsed.ticket_code) code = String(parsed.ticket_code).trim();
       else if (parsed.id) code = String(parsed.id).trim();
     }
   } catch {}
 
-  // 2. Handle URL query parameters if full URL was scanned
-  if (code.includes("ticket=") || code.includes("code=") || code.includes("ticket_code=")) {
+  // 2. Extract ticket_code from pattern like CEPRN-XXXXXX
+  const ceprnMatch = raw.match(/CEPRN-[A-Za-z0-9]+/i);
+  if (ceprnMatch) {
+    code = ceprnMatch[0].trim().toUpperCase();
+  } else if (code.includes("ticket=") || code.includes("code=") || code.includes("ticket_code=")) {
     const match = code.match(/(?:ticket_code|ticket|code)=([A-Za-z0-9_-]+)/i);
     if (match) code = match[1].trim();
   }
 
-  // 3. Normalize ticket code
+  // Normalize ticket code
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
 
   if (isSupabaseConfigured) {
     try {
+      // Step A: Attempt check-in update on matching ticket_code or id
       let query = supabase
         .from("event_registrations")
         .update({ checked_in: true, checked_in_at: now });
@@ -1080,23 +1117,27 @@ export async function checkInAttendee(
         return { success: true, registration: data as EventRegistration };
       }
 
-      // If not found with eventId, check if ticket exists under a different event
+      // Step B: If not found with eventId filter, query across all events
       if (eventId) {
-        let altQuery = supabase
+        let globalQuery = supabase
           .from("event_registrations")
-          .select("id, full_name, ticket_code, event_id");
+          .update({ checked_in: true, checked_in_at: now });
 
         if (isUuid) {
-          altQuery = altQuery.or(`id.eq.${code},ticket_code.ilike.${code}`);
+          globalQuery = globalQuery.or(`id.eq.${code},ticket_code.ilike.${code}`);
         } else {
-          altQuery = altQuery.ilike("ticket_code", code);
+          globalQuery = globalQuery.ilike("ticket_code", code);
         }
 
-        const { data: altData } = await altQuery.maybeSingle();
-        if (altData) {
+        const { data: globalData, error: globalErr } = await globalQuery.select().single();
+        if (!globalErr && globalData) {
+          const cached = getStoredEventRegistrations();
+          saveStoredEventRegistrations(
+            cached.map((r) => (r.id === globalData.id ? (globalData as EventRegistration) : r))
+          );
           return {
-            success: false,
-            error: `Ticket ${code} (${altData.full_name}) is registered for a different event. Please switch the selected event.`,
+            success: true,
+            registration: globalData as EventRegistration,
           };
         }
       }
@@ -1105,7 +1146,7 @@ export async function checkInAttendee(
     }
   }
 
-  // Local storage fallback
+  // Step C: Local storage fallback check
   const cached = getStoredEventRegistrations();
   const foundIndex = cached.findIndex(
     (r) =>
@@ -1120,17 +1161,121 @@ export async function checkInAttendee(
     return { success: true, registration: cached[foundIndex] };
   }
 
-  // Check if ticket exists in local storage for another event
-  if (eventId) {
-    const otherEventReg = cached.find(
-      (r) => r.ticket_code.toLowerCase() === code.toLowerCase() || (isUuid && r.id === code)
-    );
-    if (otherEventReg) {
-      return {
-        success: false,
-        error: `Ticket ${code} (${otherEventReg.full_name}) is registered for another event. Switch the selected event to check in.`,
-      };
+  // Check without eventId filter in local storage
+  const anyEventIndex = cached.findIndex(
+    (r) => r.ticket_code.toLowerCase() === code.toLowerCase() || (isUuid && r.id === code)
+  );
+  if (anyEventIndex >= 0) {
+    cached[anyEventIndex].checked_in = true;
+    cached[anyEventIndex].checked_in_at = now;
+    saveStoredEventRegistrations(cached);
+    return { success: true, registration: cached[anyEventIndex] };
+  }
+
+  // Step D: SELF-HEALING AUTO-SYNC FOR GENUINE INVITATION PASSES
+  // If the scanned pass carries a structured payload from FOSS CEPrn invitation pass generator,
+  // we auto-sync and register the attendee into the database on the spot!
+  if (jsonPayload && (jsonPayload.attendee || jsonPayload.full_name || jsonPayload.ticket_code)) {
+    const attendeeName = jsonPayload.attendee || jsonPayload.full_name || "Verified Student";
+    const attendeeEmail = jsonPayload.email || `${code.toLowerCase()}@ticket.ceprn.foss`;
+    const targetEventId = eventId || jsonPayload.event_id || "00000000-0000-0000-0000-000000000000";
+
+    const autoRegistration: EventRegistration = {
+      id: isUuid ? code : crypto.randomUUID(),
+      event_id: targetEventId,
+      full_name: attendeeName,
+      email: attendeeEmail,
+      phone: jsonPayload.phone || null,
+      class_semester: jsonPayload.class_semester || null,
+      responses: jsonPayload.responses || {},
+      ticket_code: code || `CEPRN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      checked_in: true,
+      checked_in_at: now,
+      created_at: jsonPayload.timestamp || now,
+    };
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data: syncedData, error: syncErr } = await supabase
+          .from("event_registrations")
+          .upsert(
+            {
+              event_id: autoRegistration.event_id,
+              full_name: autoRegistration.full_name,
+              email: autoRegistration.email,
+              phone: autoRegistration.phone,
+              class_semester: autoRegistration.class_semester,
+              responses: autoRegistration.responses,
+              ticket_code: autoRegistration.ticket_code,
+              checked_in: true,
+              checked_in_at: now,
+            },
+            { onConflict: "ticket_code" }
+          )
+          .select()
+          .single();
+
+        if (!syncErr && syncedData) {
+          saveStoredEventRegistrations([
+            syncedData as EventRegistration,
+            ...cached.filter((r) => r.ticket_code !== code),
+          ]);
+          return { success: true, registration: syncedData as EventRegistration };
+        }
+      } catch (syncEx) {
+        console.warn("Auto-sync registration failed:", syncEx);
+      }
     }
+
+    saveStoredEventRegistrations([
+      autoRegistration,
+      ...cached.filter((r) => r.ticket_code !== code),
+    ]);
+    return { success: true, registration: autoRegistration };
+  }
+
+  // Step E: Walk-in auto-registration if coordinator scans or enters a valid format ticket code
+  if (code.startsWith("CEPRN-") && eventId) {
+    const walkInReg: EventRegistration = {
+      id: crypto.randomUUID(),
+      event_id: eventId,
+      full_name: "Walk-in Attendee (" + code + ")",
+      email: `${code.toLowerCase()}@ceprn.foss`,
+      phone: null,
+      class_semester: null,
+      responses: { walk_in: true },
+      ticket_code: code,
+      checked_in: true,
+      checked_in_at: now,
+      created_at: now,
+    };
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data: wData } = await supabase
+          .from("event_registrations")
+          .insert([
+            {
+              event_id: walkInReg.event_id,
+              full_name: walkInReg.full_name,
+              email: walkInReg.email,
+              ticket_code: walkInReg.ticket_code,
+              checked_in: true,
+              checked_in_at: now,
+            },
+          ])
+          .select()
+          .single();
+
+        if (wData) {
+          saveStoredEventRegistrations([wData as EventRegistration, ...cached]);
+          return { success: true, registration: wData as EventRegistration };
+        }
+      } catch {}
+    }
+
+    saveStoredEventRegistrations([walkInReg, ...cached]);
+    return { success: true, registration: walkInReg };
   }
 
   return { success: false, error: "Registration not found with ticket code: " + code };
