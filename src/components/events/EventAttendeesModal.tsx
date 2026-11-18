@@ -18,6 +18,7 @@ import {
   Filter,
   Camera,
   CameraOff,
+  Upload,
   UserCheck,
   UserX,
   Volume2,
@@ -68,6 +69,9 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
   const [isScanningCamera, setIsScanningCamera] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const isProcessingScanRef = useRef(false);
+  const lastScannedCodeRef = useRef("");
+  const lastScanTimeRef = useRef(0);
 
   // Quick check-in input
   const [quickCode, setQuickCode] = useState("");
@@ -113,11 +117,15 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
         if (html5QrCodeRef.current.isScanning) {
           await html5QrCodeRef.current.stop();
         }
-        html5QrCodeRef.current.clear();
+        await html5QrCodeRef.current.clear();
       } catch (err) {
         console.warn("Error stopping camera scanner:", err);
       }
       html5QrCodeRef.current = null;
+    }
+    const container = document.getElementById("html5-qr-reader");
+    if (container) {
+      container.innerHTML = "";
     }
     setIsScanningCamera(false);
     setCameraError("");
@@ -130,31 +138,102 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
     // Give DOM a tick to render element
     setTimeout(async () => {
       try {
+        if (html5QrCodeRef.current) {
+          try {
+            if (html5QrCodeRef.current.isScanning) {
+              await html5QrCodeRef.current.stop();
+            }
+            await html5QrCodeRef.current.clear();
+          } catch {}
+          html5QrCodeRef.current = null;
+        }
+
         const qrElement = document.getElementById("html5-qr-reader");
         if (!qrElement) return;
+        qrElement.innerHTML = "";
 
         const scanner = new Html5Qrcode("html5-qr-reader");
         html5QrCodeRef.current = scanner;
 
-        await scanner.start(
-          { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: { width: 220, height: 220 },
+        const qrConfig = {
+          fps: 10,
+          qrbox: (w: number, h: number) => {
+            const edge = Math.floor(Math.min(w, h) * 0.75);
+            return { width: Math.max(edge, 160), height: Math.max(edge, 160) };
           },
-          (decodedText) => {
-            handleDecodedCode(decodedText);
-          },
-          () => {
-            // Frame parse error - ignore
+        };
+
+        const onScanSuccess = (decodedText: string) => {
+          handleDecodedCode(decodedText);
+        };
+
+        let started = false;
+
+        // Try getting cameras list first
+        try {
+          const cameras = await Html5Qrcode.getCameras().catch(() => []);
+          if (cameras && cameras.length > 0) {
+            const backCam = cameras.find((c) =>
+              /back|rear|environment|facing\s*back/i.test(c.label)
+            );
+            const targetCam = backCam ? backCam.id : cameras[0].id;
+            await scanner.start(targetCam, qrConfig, onScanSuccess, () => {});
+            started = true;
           }
-        );
+        } catch (camErr) {
+          console.warn("Camera enum start failed:", camErr);
+        }
+
+        if (!started) {
+          try {
+            await scanner.start({ facingMode: "environment" }, qrConfig, onScanSuccess, () => {});
+            started = true;
+          } catch (envErr) {
+            console.warn("Environment camera failed, falling back to user/webcam:", envErr);
+            await scanner.start({ facingMode: "user" }, qrConfig, onScanSuccess, () => {});
+            started = true;
+          }
+        }
       } catch (err: any) {
         console.error("Failed to start camera scanner:", err);
-        setCameraError(err?.message || "Could not access camera. Please check camera permissions.");
+        let msg = err?.message || "Could not access camera. Please check camera permissions.";
+        if (msg.includes("NotAllowedError") || msg.includes("Permission")) {
+          msg = "Camera permission was denied. Please allow camera permissions in browser site settings.";
+        } else if (msg.includes("NotFoundError") || msg.includes("DevicesNotFoundError")) {
+          msg = "No camera hardware detected on this device.";
+        }
+        setCameraError(msg);
         setIsScanningCamera(false);
       }
     }, 150);
+  };
+
+  const handleScanImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !event) return;
+
+    try {
+      setCheckingIn(true);
+      let scanner = html5QrCodeRef.current;
+      if (!scanner) {
+        const qrElement = document.getElementById("html5-qr-reader");
+        if (qrElement) qrElement.innerHTML = "";
+        scanner = new Html5Qrcode("html5-qr-reader");
+        html5QrCodeRef.current = scanner;
+      }
+      const decoded = await scanner.scanFile(file, false);
+      if (decoded) {
+        await handleDecodedCode(decoded);
+      }
+    } catch (err: any) {
+      setCheckInMsg({
+        type: "error",
+        text: "Could not read QR code from image. Please ensure image is well-lit and QR code is sharp.",
+      });
+    } finally {
+      setCheckingIn(false);
+      e.target.value = "";
+    }
   };
 
   const handleDecodedCode = async (decodedText: string) => {
@@ -167,6 +246,16 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
         code = parsed.ticket_code;
       }
     } catch {}
+
+    const now = Date.now();
+    if (isProcessingScanRef.current) return;
+    if (lastScannedCodeRef.current === code && now - lastScanTimeRef.current < 3500) {
+      return;
+    }
+
+    isProcessingScanRef.current = true;
+    lastScannedCodeRef.current = code;
+    lastScanTimeRef.current = now;
 
     try {
       const res = await checkInAttendee(code, event.id);
@@ -187,6 +276,10 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
       }
     } catch (err: any) {
       setCheckInMsg({ type: "error", text: err.message || "Error processing QR ticket." });
+    } finally {
+      setTimeout(() => {
+        isProcessingScanRef.current = false;
+      }, 1000);
     }
   };
 
@@ -350,6 +443,21 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                   </>
                 )}
               </Button>
+
+              <label
+                className="h-9 px-3 text-xs rounded-xl gap-1.5 font-bold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 inline-flex items-center cursor-pointer transition-colors"
+                title="Scan QR code from saved invitation pass image file"
+              >
+                <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">Upload Pass</span>
+                <span className="sm:hidden">Upload</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleScanImageFile}
+                />
+              </label>
 
               <Button
                 variant="outline"

@@ -16,3 +16,4 @@ ALTER TABLE public.events
 
 -- Reload schema cache
 NOTIFY pgrst, 'reload schema';
+

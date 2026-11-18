@@ -165,6 +165,35 @@ export const AdminOverview: React.FC = () => {
         </Button>
       }
     >
+      {/* ExeCom Main Operations Banner */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-950 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-emerald-500/30 shadow-xs">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 flex items-center justify-center shrink-0">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-white">ExeCom Chapter Main Dashboard</h3>
+              <span className="text-[10px] font-semibold bg-emerald-500/25 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                Live QR Pass Scanner
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5 line-clamp-1">
+              Access the main operational dashboard to verify attendee QR ticket passes, manage registrations, and coordinate workshops.
+            </p>
+          </div>
+        </div>
+        <Button
+          asChild
+          className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs gap-1.5 shrink-0 h-9 px-4 shadow-sm shadow-emerald-950/20"
+        >
+          <a href="https://foss.ieprn.co.in/execom/dashboard">
+            <span>Open Main Dashboard</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </Button>
+      </div>
+
       {/* 6 KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
         {kpis.map((kpi, idx) => {

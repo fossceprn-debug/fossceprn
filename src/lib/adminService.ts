@@ -1034,8 +1034,26 @@ export async function checkInAttendee(
   ticketCodeOrId: string,
   eventId?: string
 ): Promise<{ success: boolean; registration?: EventRegistration; error?: string }> {
-  const code = ticketCodeOrId.trim();
+  let code = ticketCodeOrId.trim();
   const now = new Date().toISOString();
+
+  // 1. Try parsing JSON payload if scanned from a rich QR code
+  try {
+    if (code.startsWith("{") && code.endsWith("}")) {
+      const parsed = JSON.parse(code);
+      if (parsed.ticket_code) code = String(parsed.ticket_code).trim();
+      else if (parsed.id) code = String(parsed.id).trim();
+    }
+  } catch {}
+
+  // 2. Handle URL query parameters if full URL was scanned
+  if (code.includes("ticket=") || code.includes("code=") || code.includes("ticket_code=")) {
+    const match = code.match(/(?:ticket_code|ticket|code)=([A-Za-z0-9_-]+)/i);
+    if (match) code = match[1].trim();
+  }
+
+  // 3. Normalize ticket code
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
 
   if (isSupabaseConfigured) {
     try {
@@ -1043,10 +1061,10 @@ export async function checkInAttendee(
         .from("event_registrations")
         .update({ checked_in: true, checked_in_at: now });
 
-      if (code.startsWith("CEPRN-") || code.length <= 16) {
-        query = query.ilike("ticket_code", code);
+      if (isUuid) {
+        query = query.or(`id.eq.${code},ticket_code.ilike.${code}`);
       } else {
-        query = query.eq("id", code);
+        query = query.ilike("ticket_code", code);
       }
 
       if (eventId) {
@@ -1061,15 +1079,37 @@ export async function checkInAttendee(
         );
         return { success: true, registration: data as EventRegistration };
       }
+
+      // If not found with eventId, check if ticket exists under a different event
+      if (eventId) {
+        let altQuery = supabase
+          .from("event_registrations")
+          .select("id, full_name, ticket_code, event_id");
+
+        if (isUuid) {
+          altQuery = altQuery.or(`id.eq.${code},ticket_code.ilike.${code}`);
+        } else {
+          altQuery = altQuery.ilike("ticket_code", code);
+        }
+
+        const { data: altData } = await altQuery.maybeSingle();
+        if (altData) {
+          return {
+            success: false,
+            error: `Ticket ${code} (${altData.full_name}) is registered for a different event. Please switch the selected event.`,
+          };
+        }
+      }
     } catch (err: any) {
       console.warn("Supabase check-in error:", err);
     }
   }
 
+  // Local storage fallback
   const cached = getStoredEventRegistrations();
   const foundIndex = cached.findIndex(
     (r) =>
-      (r.ticket_code.toLowerCase() === code.toLowerCase() || r.id === code) &&
+      (r.ticket_code.toLowerCase() === code.toLowerCase() || (isUuid && r.id === code)) &&
       (!eventId || r.event_id === eventId)
   );
 
@@ -1078,6 +1118,19 @@ export async function checkInAttendee(
     cached[foundIndex].checked_in_at = now;
     saveStoredEventRegistrations(cached);
     return { success: true, registration: cached[foundIndex] };
+  }
+
+  // Check if ticket exists in local storage for another event
+  if (eventId) {
+    const otherEventReg = cached.find(
+      (r) => r.ticket_code.toLowerCase() === code.toLowerCase() || (isUuid && r.id === code)
+    );
+    if (otherEventReg) {
+      return {
+        success: false,
+        error: `Ticket ${code} (${otherEventReg.full_name}) is registered for another event. Switch the selected event to check in.`,
+      };
+    }
   }
 
   return { success: false, error: "Registration not found with ticket code: " + code };
