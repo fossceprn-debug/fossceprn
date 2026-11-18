@@ -11,6 +11,7 @@ import {
   Megaphone,
   Settings,
   ShieldCheck,
+  Database,
   GraduationCap,
   LogOut,
   Menu,
@@ -56,6 +57,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
   const systemLinks = [
     { name: "Website Settings", href: "/admin/settings", icon: Settings },
+    { name: "Database & Storage", href: "/admin/storage", icon: Database },
     ...(isSuperAdmin
       ? [{ name: "Admin Users", href: "/admin/admin-users", icon: ShieldCheck, superOnly: true }]
       : []),

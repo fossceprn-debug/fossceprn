@@ -789,7 +789,11 @@ function sanitizeEventPayload(payload: Partial<EventItem>): Record<string, any> 
     "coordinator2_id",
     "coordinator2_phone",
     "volunteer1_name",
+    "volunteer1_id",
+    "volunteer1_phone",
     "volunteer2_name",
+    "volunteer2_id",
+    "volunteer2_phone",
   ];
 
   const sanitized: Record<string, any> = {};
@@ -1056,6 +1060,205 @@ export async function getEventRegistrations(eventId: string): Promise<EventRegis
   }
 
   return list;
+}
+
+export interface EventStorageItem {
+  id: string;
+  title: string;
+  slug?: string;
+  start_date: string;
+  publication_status: string;
+  registration_mode?: string | null;
+  registrationsCount: number;
+  checkedInCount: number;
+  estimatedBytes: number;
+}
+
+export interface DatabaseStorageStats {
+  totalRows: number;
+  estimatedTotalBytes: number;
+  supabaseLimitBytes: number;
+  tableCounts: {
+    events: number;
+    event_registrations: number;
+    members: number;
+    execom_members: number;
+    announcements: number;
+    activities: number;
+    projects: number;
+    gallery_images: number;
+  };
+  eventBreakdown: EventStorageItem[];
+}
+
+/**
+ * Clears/purges all registrations for a specific event to reclaim database capacity
+ */
+export async function clearEventRegistrations(eventId: string): Promise<number> {
+  let count = 0;
+  if (isSupabaseConfigured) {
+    try {
+      const { count: c } = await supabase
+        .from("event_registrations")
+        .select("*", { count: "exact", head: true })
+        .eq("event_id", eventId);
+      count = c || 0;
+
+      const { error } = await supabase
+        .from("event_registrations")
+        .delete()
+        .eq("event_id", eventId);
+
+      if (error) {
+        console.warn("Supabase clearEventRegistrations failed:", error.message);
+      }
+    } catch (err) {
+      console.warn("Supabase clearEventRegistrations exception:", err);
+    }
+  }
+
+  const cached = getStoredEventRegistrations();
+  const filtered = cached.filter((r) => r.event_id !== eventId);
+  if (count === 0) {
+    count = cached.length - filtered.length;
+  }
+  saveStoredEventRegistrations(filtered);
+  logActivity("Purged Event Registrations", "event", eventId, { purgedCount: count }).catch(() => {});
+  return count;
+}
+
+/**
+ * Clears registrations for all past events older than 7 days to reclaim storage capacity
+ */
+export async function clearAllPastEventRegistrations(): Promise<number> {
+  const events = await getAllEventsAdmin();
+  const pastEvents = events.filter((e: EventItem) => {
+    if (!e.start_date) return false;
+    const eventTime = new Date(e.end_date || e.start_date).getTime();
+    return Date.now() - eventTime > 7 * 24 * 60 * 60 * 1000;
+  });
+
+  let totalPurged = 0;
+  for (const evt of pastEvents) {
+    const purged = await clearEventRegistrations(evt.id);
+    totalPurged += purged;
+  }
+  return totalPurged;
+}
+
+/**
+ * Computes database row statistics and per-event storage usage
+ */
+export async function getDatabaseStorageStats(): Promise<DatabaseStorageStats> {
+  const stats: DatabaseStorageStats = {
+    totalRows: 0,
+    estimatedTotalBytes: 0,
+    supabaseLimitBytes: 524288000, // 500 MB Free Tier
+    tableCounts: {
+      events: 0,
+      event_registrations: 0,
+      members: 0,
+      execom_members: 0,
+      announcements: 0,
+      activities: 0,
+      projects: 0,
+      gallery_images: 0,
+    },
+    eventBreakdown: [],
+  };
+
+  const events = await getAllEventsAdmin();
+  stats.tableCounts.events = events.length;
+
+  if (isSupabaseConfigured) {
+    try {
+      const [
+        regsRes,
+        membersRes,
+        execomRes,
+        announceRes,
+        actsRes,
+        projRes,
+        gallRes,
+      ] = await Promise.all([
+        supabase.from("event_registrations").select("*", { count: "exact", head: true }),
+        supabase.from("members").select("*", { count: "exact", head: true }),
+        supabase.from("execom_members").select("*", { count: "exact", head: true }),
+        supabase.from("announcements").select("*", { count: "exact", head: true }),
+        supabase.from("activities").select("*", { count: "exact", head: true }),
+        supabase.from("projects").select("*", { count: "exact", head: true }),
+        supabase.from("gallery_images").select("*", { count: "exact", head: true }),
+      ]);
+
+      stats.tableCounts.event_registrations = regsRes.count || 0;
+      stats.tableCounts.members = membersRes.count || 0;
+      stats.tableCounts.execom_members = execomRes.count || 0;
+      stats.tableCounts.announcements = announceRes.count || 0;
+      stats.tableCounts.activities = actsRes.count || 0;
+      stats.tableCounts.projects = projRes.count || 0;
+      stats.tableCounts.gallery_images = gallRes.count || 0;
+    } catch (err) {
+      console.warn("Error fetching Supabase table counts:", err);
+    }
+  }
+
+  if (stats.tableCounts.event_registrations === 0) {
+    stats.tableCounts.event_registrations = getStoredEventRegistrations().length;
+  }
+
+  stats.totalRows = Object.values(stats.tableCounts).reduce((a, b) => a + b, 0);
+
+  const regBytes = stats.tableCounts.event_registrations * 180;
+  const eventBytes = stats.tableCounts.events * 1500;
+  const otherBytes =
+    (stats.tableCounts.members +
+      stats.tableCounts.execom_members +
+      stats.tableCounts.announcements +
+      stats.tableCounts.activities +
+      stats.tableCounts.projects +
+      stats.tableCounts.gallery_images) * 400;
+
+  stats.estimatedTotalBytes = regBytes + eventBytes + otherBytes;
+
+  let allRegs: EventRegistration[] = [];
+  if (isSupabaseConfigured) {
+    try {
+      const { data } = await supabase.from("event_registrations").select("id, event_id, checked_in");
+      if (data) allRegs = data as EventRegistration[];
+    } catch {}
+  }
+  if (allRegs.length === 0) {
+    allRegs = getStoredEventRegistrations();
+  }
+
+  const regsByEvent: Record<string, { total: number; checkedIn: number }> = {};
+  for (const r of allRegs) {
+    if (!regsByEvent[r.event_id]) {
+      regsByEvent[r.event_id] = { total: 0, checkedIn: 0 };
+    }
+    regsByEvent[r.event_id].total++;
+    if (r.checked_in) {
+      regsByEvent[r.event_id].checkedIn++;
+    }
+  }
+
+  stats.eventBreakdown = events.map((e: EventItem) => {
+    const regData = regsByEvent[e.id] || { total: 0, checkedIn: 0 };
+    const estBytes = 1500 + regData.total * 180;
+    return {
+      id: e.id,
+      title: e.title,
+      slug: e.slug,
+      start_date: e.start_date,
+      publication_status: e.publication_status,
+      registration_mode: e.registration_mode || "onsite",
+      registrationsCount: regData.total,
+      checkedInCount: regData.checkedIn,
+      estimatedBytes: estBytes,
+    };
+  });
+
+  return stats;
 }
 
 export async function checkInAttendee(

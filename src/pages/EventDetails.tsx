@@ -205,6 +205,36 @@ export const EventDetails: React.FC = () => {
                         {event.venue}
                       </span>
                     </div>
+
+                    {/* Event Coordinators */}
+                    {(event.coordinator1_name || event.coordinator_name || event.coordinator2_name) && (
+                      <div className="flex flex-col gap-0.5 border-t border-slate-100 pt-2 text-xs">
+                        <span className="text-slate-400 font-bold uppercase text-[10px]">
+                          Event Coordinators
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          {[event.coordinator1_name, event.coordinator2_name].filter(Boolean).join(" & ") ||
+                            event.coordinator_name}
+                        </span>
+                        {(event.coordinator1_phone || event.coordinator_phone || event.coordinator2_phone) && (
+                          <span className="text-slate-500 text-[11px]">
+                            Ph: {[event.coordinator1_phone, event.coordinator2_phone].filter(Boolean).join(" / ") || event.coordinator_phone}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Student Volunteers */}
+                    {(event.volunteer1_name || event.volunteer2_name) && (
+                      <div className="flex flex-col gap-0.5 border-t border-slate-100 pt-2 text-xs">
+                        <span className="text-slate-400 font-bold uppercase text-[10px]">
+                          Student Volunteers
+                        </span>
+                        <span className="font-medium text-slate-700">
+                          {[event.volunteer1_name, event.volunteer2_name].filter(Boolean).join(" & ")}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {event.registration_status === "open" && (

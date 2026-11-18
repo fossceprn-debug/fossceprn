@@ -33,6 +33,7 @@ import AdminProjects from "@/pages/admin/AdminProjects";
 import AdminGallery from "@/pages/admin/AdminGallery";
 import AdminAnnouncements from "@/pages/admin/AdminAnnouncements";
 import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminStorage from "@/pages/admin/AdminStorage";
 import AdminUsers from "@/pages/admin/AdminUsers";
 
 const queryClient = new QueryClient({
@@ -176,6 +177,14 @@ export function App() {
               element={
                 <AdminProtectedRoute>
                   <AdminSettings />
+                </AdminProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/storage"
+              element={
+                <AdminProtectedRoute>
+                  <AdminStorage />
                 </AdminProtectedRoute>
               }
             />

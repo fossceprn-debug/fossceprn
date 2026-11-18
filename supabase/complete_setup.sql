@@ -1809,7 +1809,11 @@ ALTER TABLE public.events
   ADD COLUMN IF NOT EXISTS coordinator2_id TEXT,
   ADD COLUMN IF NOT EXISTS coordinator2_phone TEXT,
   ADD COLUMN IF NOT EXISTS volunteer1_name TEXT,
-  ADD COLUMN IF NOT EXISTS volunteer2_name TEXT;
+  ADD COLUMN IF NOT EXISTS volunteer1_id TEXT,
+  ADD COLUMN IF NOT EXISTS volunteer1_phone TEXT,
+  ADD COLUMN IF NOT EXISTS volunteer2_name TEXT,
+  ADD COLUMN IF NOT EXISTS volunteer2_id TEXT,
+  ADD COLUMN IF NOT EXISTS volunteer2_phone TEXT;
 
 -- Reload Supabase PostgREST schema cache
 NOTIFY pgrst, 'reload schema';

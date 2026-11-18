@@ -94,7 +94,11 @@ export interface EventItem {
   coordinator2_id?: string | null;
   coordinator2_phone?: string | null;
   volunteer1_name?: string | null;
+  volunteer1_id?: string | null;
+  volunteer1_phone?: string | null;
   volunteer2_name?: string | null;
+  volunteer2_id?: string | null;
+  volunteer2_phone?: string | null;
   created_at: string;
 }
 

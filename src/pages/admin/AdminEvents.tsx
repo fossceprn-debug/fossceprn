@@ -100,8 +100,10 @@ export const AdminEvents: React.FC = () => {
     coordinator2_phone: "",
     coordinator2_type: "execom" as "execom" | "external",
     volunteer1_name: "",
+    volunteer1_id: "" as string | null,
     volunteer1_type: "execom" as "execom" | "external",
     volunteer2_name: "",
+    volunteer2_id: "" as string | null,
     volunteer2_type: "execom" as "execom" | "external",
   });
 
@@ -157,8 +159,10 @@ export const AdminEvents: React.FC = () => {
       coordinator2_phone: "",
       coordinator2_type: "execom",
       volunteer1_name: "",
+      volunteer1_id: "",
       volunteer1_type: "execom",
       volunteer2_name: "",
+      volunteer2_id: "",
       volunteer2_type: "execom",
     });
     setErrorMsg("");
@@ -191,11 +195,15 @@ export const AdminEvents: React.FC = () => {
     const c2Type = foundC2 || (!evt.coordinator2_name && !evt.coordinator2_id) ? "execom" : "external";
 
     // Matching for Volunteers
-    const isV1Execom = execomMembers.some(
-      (m) => evt.volunteer1_name && m.full_name.trim().toLowerCase() === evt.volunteer1_name.trim().toLowerCase()
+    const foundV1 = execomMembers.find(
+      (m) =>
+        (evt.volunteer1_id && m.id === evt.volunteer1_id) ||
+        (evt.volunteer1_name && m.full_name.trim().toLowerCase() === evt.volunteer1_name.trim().toLowerCase())
     );
-    const isV2Execom = execomMembers.some(
-      (m) => evt.volunteer2_name && m.full_name.trim().toLowerCase() === evt.volunteer2_name.trim().toLowerCase()
+    const foundV2 = execomMembers.find(
+      (m) =>
+        (evt.volunteer2_id && m.id === evt.volunteer2_id) ||
+        (evt.volunteer2_name && m.full_name.trim().toLowerCase() === evt.volunteer2_name.trim().toLowerCase())
     );
 
     setFormData({
@@ -220,10 +228,12 @@ export const AdminEvents: React.FC = () => {
       coordinator2_id: c2Id,
       coordinator2_phone: c2Phone,
       coordinator2_type: c2Type,
-      volunteer1_name: evt.volunteer1_name || "",
-      volunteer1_type: isV1Execom || !evt.volunteer1_name ? "execom" : "external",
-      volunteer2_name: evt.volunteer2_name || "",
-      volunteer2_type: isV2Execom || !evt.volunteer2_name ? "execom" : "external",
+      volunteer1_name: evt.volunteer1_name || (foundV1 ? foundV1.full_name : ""),
+      volunteer1_id: evt.volunteer1_id || (foundV1 ? foundV1.id : ""),
+      volunteer1_type: foundV1 || !evt.volunteer1_name ? "execom" : "external",
+      volunteer2_name: evt.volunteer2_name || (foundV2 ? foundV2.full_name : ""),
+      volunteer2_id: evt.volunteer2_id || (foundV2 ? foundV2.id : ""),
+      volunteer2_type: foundV2 || !evt.volunteer2_name ? "execom" : "external",
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -904,9 +914,14 @@ export const AdminEvents: React.FC = () => {
                   {formData.volunteer1_type === "execom" ? (
                     <select
                       value={formData.volunteer1_name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, volunteer1_name: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const sel = execomMembers.find((m) => m.full_name === e.target.value);
+                        setFormData({
+                          ...formData,
+                          volunteer1_name: e.target.value,
+                          volunteer1_id: sel ? sel.id : "",
+                        });
+                      }}
                       className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg"
                     >
                       <option value="">-- None / Select ExeCom Volunteer --</option>
@@ -921,7 +936,7 @@ export const AdminEvents: React.FC = () => {
                       placeholder="e.g. Anjali Nair (S3 CSE)"
                       value={formData.volunteer1_name}
                       onChange={(e) =>
-                        setFormData({ ...formData, volunteer1_name: e.target.value })
+                        setFormData({ ...formData, volunteer1_name: e.target.value, volunteer1_id: "" })
                       }
                       className="h-9 text-xs bg-white"
                     />
@@ -965,9 +980,14 @@ export const AdminEvents: React.FC = () => {
                   {formData.volunteer2_type === "execom" ? (
                     <select
                       value={formData.volunteer2_name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, volunteer2_name: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const sel = execomMembers.find((m) => m.full_name === e.target.value);
+                        setFormData({
+                          ...formData,
+                          volunteer2_name: e.target.value,
+                          volunteer2_id: sel ? sel.id : "",
+                        });
+                      }}
                       className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg"
                     >
                       <option value="">-- None / Select ExeCom Volunteer --</option>
@@ -982,7 +1002,7 @@ export const AdminEvents: React.FC = () => {
                       placeholder="e.g. Rahul K (S5 ECE)"
                       value={formData.volunteer2_name}
                       onChange={(e) =>
-                        setFormData({ ...formData, volunteer2_name: e.target.value })
+                        setFormData({ ...formData, volunteer2_name: e.target.value, volunteer2_id: "" })
                       }
                       className="h-9 text-xs bg-white"
                     />

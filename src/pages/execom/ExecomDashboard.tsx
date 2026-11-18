@@ -198,8 +198,10 @@ export const ExecomDashboard: React.FC = () => {
     coordinator2_phone: "",
     coordinator2_type: "execom" as "execom" | "external",
     volunteer1_name: "",
+    volunteer1_id: "" as string | null,
     volunteer1_type: "execom" as "execom" | "external",
     volunteer2_name: "",
+    volunteer2_id: "" as string | null,
     volunteer2_type: "execom" as "execom" | "external",
     created_by: user?.full_name || user?.email || "ExeCom Coordinator",
     created_by_id: user?.id || null,
@@ -234,8 +236,35 @@ export const ExecomDashboard: React.FC = () => {
   const canManageEventAttendees = (evt?: EventItem | null): boolean => {
     if (isAdmin) return true;
     if (!evt || !user) return false;
-    // Only event creator, coordinator 1, coordinator 2, and admins can view/manage participants
-    return canEditEvent(evt);
+
+    // 1. Coordinators, Creator & Admins
+    if (canEditEvent(evt)) return true;
+
+    const userEmail = (user.email || "").toLowerCase().trim();
+    const userName = (user.full_name || "").toLowerCase().trim();
+    const userId = user.id;
+
+    // 2. Volunteer 1 (Assigned from event creation/editing)
+    if (evt.volunteer1_id && evt.volunteer1_id === userId) return true;
+    if (
+      evt.volunteer1_name &&
+      (evt.volunteer1_name.toLowerCase().trim() === userName ||
+        evt.volunteer1_name.toLowerCase().trim() === userEmail)
+    ) {
+      return true;
+    }
+
+    // 3. Volunteer 2 (Assigned from event creation/editing)
+    if (evt.volunteer2_id && evt.volunteer2_id === userId) return true;
+    if (
+      evt.volunteer2_name &&
+      (evt.volunteer2_name.toLowerCase().trim() === userName ||
+        evt.volunteer2_name.toLowerCase().trim() === userEmail)
+    ) {
+      return true;
+    }
+
+    return false;
   };
 
   const canApproveEvent = (evt: EventItem): boolean => {
@@ -757,8 +786,10 @@ export const ExecomDashboard: React.FC = () => {
       coordinator2_phone: "",
       coordinator2_type: "execom",
       volunteer1_name: "",
+      volunteer1_id: "",
       volunteer1_type: "execom",
       volunteer2_name: "",
+      volunteer2_id: "",
       volunteer2_type: "execom",
       created_by: user?.full_name || user?.email || "ExeCom Coordinator",
       created_by_id: user?.id || null,
@@ -797,11 +828,15 @@ export const ExecomDashboard: React.FC = () => {
     const c2Type = foundC2 || (!evt.coordinator2_name && !evt.coordinator2_id) ? "execom" : "external";
 
     // Matching for Volunteers
-    const isV1Execom = execomMembers.some(
-      (m) => evt.volunteer1_name && m.full_name.trim().toLowerCase() === evt.volunteer1_name.trim().toLowerCase()
+    const foundV1 = execomMembers.find(
+      (m) =>
+        (evt.volunteer1_id && m.id === evt.volunteer1_id) ||
+        (evt.volunteer1_name && m.full_name.trim().toLowerCase() === evt.volunteer1_name.trim().toLowerCase())
     );
-    const isV2Execom = execomMembers.some(
-      (m) => evt.volunteer2_name && m.full_name.trim().toLowerCase() === evt.volunteer2_name.trim().toLowerCase()
+    const foundV2 = execomMembers.find(
+      (m) =>
+        (evt.volunteer2_id && m.id === evt.volunteer2_id) ||
+        (evt.volunteer2_name && m.full_name.trim().toLowerCase() === evt.volunteer2_name.trim().toLowerCase())
     );
 
     setEventForm({
@@ -826,10 +861,12 @@ export const ExecomDashboard: React.FC = () => {
       coordinator2_id: c2Id,
       coordinator2_phone: c2Phone,
       coordinator2_type: c2Type,
-      volunteer1_name: evt.volunteer1_name || "",
-      volunteer1_type: isV1Execom || !evt.volunteer1_name ? "execom" : "external",
-      volunteer2_name: evt.volunteer2_name || "",
-      volunteer2_type: isV2Execom || !evt.volunteer2_name ? "execom" : "external",
+      volunteer1_name: evt.volunteer1_name || (foundV1 ? foundV1.full_name : ""),
+      volunteer1_id: evt.volunteer1_id || (foundV1 ? foundV1.id : ""),
+      volunteer1_type: foundV1 || !evt.volunteer1_name ? "execom" : "external",
+      volunteer2_name: evt.volunteer2_name || (foundV2 ? foundV2.full_name : ""),
+      volunteer2_id: evt.volunteer2_id || (foundV2 ? foundV2.id : ""),
+      volunteer2_type: foundV2 || !evt.volunteer2_name ? "execom" : "external",
       created_by: evt.created_by || user?.full_name || user?.email || "",
       created_by_id: evt.created_by_id || user?.id || null,
     });
@@ -2789,9 +2826,14 @@ export const ExecomDashboard: React.FC = () => {
                   {eventForm.volunteer1_type === "execom" ? (
                     <select
                       value={eventForm.volunteer1_name}
-                      onChange={(e) =>
-                        setEventForm({ ...eventForm, volunteer1_name: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const sel = execomMembers.find((m) => m.full_name === e.target.value);
+                        setEventForm({
+                          ...eventForm,
+                          volunteer1_name: e.target.value,
+                          volunteer1_id: sel ? sel.id : "",
+                        });
+                      }}
                       className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg"
                     >
                       <option value="">-- None / Select ExeCom Volunteer --</option>
@@ -2806,7 +2848,7 @@ export const ExecomDashboard: React.FC = () => {
                       placeholder="e.g. Anjali Nair (S3 CSE)"
                       value={eventForm.volunteer1_name}
                       onChange={(e) =>
-                        setEventForm({ ...eventForm, volunteer1_name: e.target.value })
+                        setEventForm({ ...eventForm, volunteer1_name: e.target.value, volunteer1_id: "" })
                       }
                       className="h-9 text-xs bg-white"
                     />
@@ -2850,9 +2892,14 @@ export const ExecomDashboard: React.FC = () => {
                   {eventForm.volunteer2_type === "execom" ? (
                     <select
                       value={eventForm.volunteer2_name}
-                      onChange={(e) =>
-                        setEventForm({ ...eventForm, volunteer2_name: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const sel = execomMembers.find((m) => m.full_name === e.target.value);
+                        setEventForm({
+                          ...eventForm,
+                          volunteer2_name: e.target.value,
+                          volunteer2_id: sel ? sel.id : "",
+                        });
+                      }}
                       className="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg"
                     >
                       <option value="">-- None / Select ExeCom Volunteer --</option>
@@ -2867,7 +2914,7 @@ export const ExecomDashboard: React.FC = () => {
                       placeholder="e.g. Rahul K (S5 ECE)"
                       value={eventForm.volunteer2_name}
                       onChange={(e) =>
-                        setEventForm({ ...eventForm, volunteer2_name: e.target.value })
+                        setEventForm({ ...eventForm, volunteer2_name: e.target.value, volunteer2_id: "" })
                       }
                       className="h-9 text-xs bg-white"
                     />

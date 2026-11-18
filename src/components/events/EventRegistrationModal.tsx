@@ -57,6 +57,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
   const [registration, setRegistration] = useState<EventRegistration | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const ticketRef = useRef<HTMLDivElement>(null);
+  const autoDownloadedRef = useRef(false);
 
   // Reset state when opened
   useEffect(() => {
@@ -70,6 +71,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
       setCustomResponses({});
       setRegistration(null);
       setQrDataUrl("");
+      autoDownloadedRef.current = false;
     }
   }, [isOpen, event.id]);
 
@@ -196,6 +198,14 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
       setDownloadingPass(false);
     }
   };
+
+  // Automatically download invitation pass image immediately upon reaching the ticket stage
+  useEffect(() => {
+    if (stage === "ticket" && qrDataUrl && registration && !autoDownloadedRef.current) {
+      autoDownloadedRef.current = true;
+      handleDownloadTicket();
+    }
+  }, [stage, qrDataUrl, registration]);
 
   const handlePrint = () => {
     window.print();
@@ -398,14 +408,18 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
         ) : (
           /* Stage 2: Check-in Ticket Pass with QR Code */
           <div className="p-4 sm:p-6 max-h-[86vh] overflow-y-auto space-y-5 bg-slate-50">
-            <div className="text-center space-y-1">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-1.5 shadow-inner">
+            <div className="text-center space-y-2">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-1 shadow-inner">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <h3 className="text-lg sm:text-xl font-black text-slate-900">Registration Confirmed!</h3>
               <p className="text-xs text-slate-500">
-                Your official entry pass has been generated. Save or download your pass for check-in.
+                Your official entry pass has been issued and displayed below.
               </p>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Pass automatically downloaded to your device!</span>
+              </div>
             </div>
 
             {/* Ticket Card Pass matching the official template */}
