@@ -9,7 +9,7 @@ interface ExecomProtectedRouteProps {
 }
 
 export const ExecomProtectedRoute: React.FC<ExecomProtectedRouteProps> = ({ children }) => {
-  const { user, isEditor, isAdmin, isSuperAdmin, loading } = useAuth();
+  const { user, isEditor, isFaculty, isAdmin, isSuperAdmin, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -24,6 +24,11 @@ export const ExecomProtectedRoute: React.FC<ExecomProtectedRouteProps> = ({ chil
   // If not logged in at all, redirect to /login
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // If user is a Faculty Coordinator, route them to the dedicated Faculty Console
+  if (isFaculty) {
+    return <Navigate to="/faculty/dashboard" replace />;
   }
 
   // Must have at least editor privileges (assigned to ExeCom members)

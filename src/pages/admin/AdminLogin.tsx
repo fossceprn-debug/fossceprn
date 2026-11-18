@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 export const AdminLogin: React.FC = () => {
-  const { user, isViewer, login } = useAuth();
+  const { user, isFaculty, isAdmin, isSuperAdmin, isEditor, login } = useAuth();
   const [emailOrId, setEmailOrId] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,12 +26,18 @@ export const AdminLogin: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // If already logged in with admin privileges, redirect to /admin
+  // If already logged in, route to the appropriate dashboard
   useEffect(() => {
-    if (user && isViewer) {
-      navigate("/admin", { replace: true });
+    if (user) {
+      if (isFaculty) {
+        navigate("/faculty/dashboard", { replace: true });
+      } else if (isAdmin || isSuperAdmin) {
+        navigate("/admin", { replace: true });
+      } else if (isEditor) {
+        navigate("/execom/dashboard", { replace: true });
+      }
     }
-  }, [user, isViewer, navigate]);
+  }, [user, isFaculty, isAdmin, isSuperAdmin, isEditor, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,9 +48,17 @@ export const AdminLogin: React.FC = () => {
     try {
       const res = await login(emailOrId, password);
       if (res.success) {
-        setSuccessMsg("Authenticated successfully. Redirecting to admin console...");
-        const target = location.state?.from?.pathname || "/admin";
-        setTimeout(() => navigate(target), 800);
+        if (res.role === "faculty") {
+          setSuccessMsg("Authenticated successfully! Opening Faculty Console...");
+          setTimeout(() => navigate("/faculty/dashboard"), 600);
+        } else if (res.role === "editor") {
+          setSuccessMsg("Authenticated successfully! Opening ExeCom Dashboard...");
+          setTimeout(() => navigate("/execom/dashboard"), 600);
+        } else {
+          setSuccessMsg("Authenticated successfully. Redirecting to admin console...");
+          const target = location.state?.from?.pathname || "/admin";
+          setTimeout(() => navigate(target), 600);
+        }
       } else {
         setErrorMsg(res.error || "Invalid credentials.");
       }

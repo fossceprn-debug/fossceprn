@@ -457,6 +457,22 @@ export const FacultyDashboard: React.FC = () => {
             </p>
           </div>
 
+          {(isAdmin || isSuperAdmin) && (
+            <div className="px-3 pb-2">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-full text-xs text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 gap-1.5"
+              >
+                <Link to="/admin">
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  <span>Switch to Admin Console</span>
+                </Link>
+              </Button>
+            </div>
+          )}
+
           {/* Footer Actions */}
           <div className="p-3 border-t border-slate-100 flex items-center justify-between gap-2">
             <Button

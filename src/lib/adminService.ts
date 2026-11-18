@@ -399,10 +399,12 @@ export async function getAllExecomAdmin(): Promise<ExecomMember[]> {
           m.designation.toLowerCase().includes("staff advisor")
         ));
 
-      const finalRole =
+      // Prioritize live user_roles table, then execom_members.role from DB, then localStorage, then designation fallback
+      const dbUserRole = m.user_id ? roleMap.get(m.user_id) : undefined;
+      const finalRole: AdminRole =
+        dbUserRole ||
         (m as any).role ||
         assigned?.role ||
-        (m.user_id ? roleMap.get(m.user_id) : undefined) ||
         (isFaculty ? "faculty" : "editor");
 
       return {
@@ -514,12 +516,13 @@ export async function updateExecomMember(
 ): Promise<ExecomMember> {
   const { login_password: newPassword, role: memberRole, ...standardUpdates } = updates;
 
-  const isFaculty =
-    memberRole === "faculty" ||
-    standardUpdates.designation?.toLowerCase().includes("faculty") ||
-    standardUpdates.designation?.toLowerCase().includes("staff advisor");
-
-  const determinedRole: AdminRole = isFaculty ? "faculty" : (memberRole || "editor");
+  // Respect explicitly provided memberRole, otherwise fallback to designation
+  const determinedRole: AdminRole =
+    memberRole ||
+    (standardUpdates.designation?.toLowerCase().includes("faculty") ||
+    standardUpdates.designation?.toLowerCase().includes("staff advisor")
+      ? "faculty"
+      : "editor");
 
   const updatePayload: any = {
     ...standardUpdates,
@@ -571,6 +574,40 @@ export async function updateExecomMember(
   if (error) throw error;
 
   const activeEmail = standardUpdates.email || data?.email;
+  const activeUserId = data?.user_id;
+
+  // 1. Sync role directly to user_roles table if user_id is present
+  if (activeUserId) {
+    try {
+      await supabase
+        .from("user_roles")
+        .upsert([{ user_id: activeUserId, role: determinedRole }], { onConflict: "user_id,role" });
+      await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", activeUserId)
+        .neq("role", determinedRole);
+    } catch (e) {
+      console.warn("Could not sync user_roles in updateExecomMember:", e);
+    }
+  }
+
+  // 2. Sync assigned credentials in localStorage
+  if (activeEmail) {
+    try {
+      saveAssignedCredential({
+        execomId: id,
+        fullName: data?.full_name || standardUpdates.full_name || "Coordinator",
+        email: activeEmail,
+        password: newPassword || data?.login_password || "Foss@2026",
+        role: determinedRole,
+      });
+    } catch (e) {
+      console.warn("Could not sync assigned credentials in localStorage:", e);
+    }
+  }
+
+  // 3. If password provided, sync live auth credentials
   if (data?.id && activeEmail && newPassword) {
     try {
       await provisionExecomCredentials({
@@ -587,6 +624,7 @@ export async function updateExecomMember(
 
   await logActivity("Updated Execom Member", "execom_member", id, {
     updates: Object.keys(standardUpdates),
+    role: determinedRole,
   });
   return { ...data, role: determinedRole, login_password: newPassword || data?.login_password };
 }
@@ -1270,6 +1308,30 @@ export async function assignAdminRole(
 
   if (upsertErr) throw upsertErr;
 
+  // Clean any other roles for this user
+  await supabase
+    .from("user_roles")
+    .delete()
+    .eq("user_id", profile.id)
+    .neq("role", role);
+
+  // Sync to execom_members and localStorage if exists
+  try {
+    await supabase
+      .from("execom_members")
+      .update({ role: role })
+      .or(`user_id.eq.${profile.id},email.ilike.${cleanEmail}`);
+
+    saveAssignedCredential({
+      fullName: profile.full_name || cleanEmail,
+      email: cleanEmail,
+      password: "Foss@2026",
+      role: role,
+    });
+  } catch (syncErr) {
+    console.warn("Notice syncing assignAdminRole to execom:", syncErr);
+  }
+
   await logActivity(`Assigned role: ${role}`, "user_roles", profile.id, {
     email: cleanEmail,
     role,
@@ -1290,6 +1352,35 @@ export async function changeAdminRole(roleRecordId: string, newRole: AdminRole):
     .single();
 
   if (error) throw error;
+
+  // Sync to execom_members and localStorage if this user is in execom_members
+  if (data?.user_id) {
+    try {
+      await supabase
+        .from("execom_members")
+        .update({ role: newRole })
+        .eq("user_id", data.user_id);
+
+      const { data: mem } = await supabase
+        .from("execom_members")
+        .select("id, full_name, email, login_password")
+        .eq("user_id", data.user_id)
+        .maybeSingle();
+
+      if (mem && mem.email) {
+        saveAssignedCredential({
+          execomId: mem.id,
+          fullName: mem.full_name,
+          email: mem.email,
+          password: mem.login_password || "Foss@2026",
+          role: newRole,
+        });
+      }
+    } catch (syncErr) {
+      console.warn("Could not sync changeAdminRole to execom_members:", syncErr);
+    }
+  }
+
   await logActivity(`Changed role to ${newRole}`, "user_roles", data.user_id, { newRole });
 }
 

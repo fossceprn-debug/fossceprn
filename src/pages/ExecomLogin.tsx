@@ -22,9 +22,22 @@ export const ExecomLogin: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  const { login } = useAuth();
+  const { user, isFaculty, isAdmin, isSuperAdmin, isEditor, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // If already logged in, route to appropriate console
+  React.useEffect(() => {
+    if (user) {
+      if (isFaculty) {
+        navigate("/faculty/dashboard", { replace: true });
+      } else if (isAdmin || isSuperAdmin) {
+        navigate("/admin", { replace: true });
+      } else if (isEditor) {
+        navigate("/execom/dashboard", { replace: true });
+      }
+    }
+  }, [user, isFaculty, isAdmin, isSuperAdmin, isEditor, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,9 +48,17 @@ export const ExecomLogin: React.FC = () => {
     try {
       const res = await login(emailOrId, password);
       if (res.success) {
-        setSuccessMsg("Authenticated successfully! Redirecting to ExeCom dashboard...");
-        const target = location.state?.from?.pathname || "/execom/dashboard";
-        setTimeout(() => navigate(target), 700);
+        if (res.role === "faculty") {
+          setSuccessMsg("Authenticated successfully! Opening Faculty Console...");
+          setTimeout(() => navigate("/faculty/dashboard"), 600);
+        } else if (res.role === "admin" || res.role === "super_admin") {
+          setSuccessMsg("Authenticated successfully! Opening Admin Console...");
+          setTimeout(() => navigate("/admin"), 600);
+        } else {
+          setSuccessMsg("Authenticated successfully! Redirecting to ExeCom dashboard...");
+          const target = location.state?.from?.pathname || "/execom/dashboard";
+          setTimeout(() => navigate(target), 600);
+        }
       } else {
         setErrorMsg(res.error || "Invalid coordinator credentials. Please check your user ID and password.");
       }

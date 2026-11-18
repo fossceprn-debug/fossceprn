@@ -33,11 +33,13 @@ BEGIN
     NEW.login_password := 'Foss@' || SUBSTRING(MD5(RANDOM()::TEXT), 1, 8);
   END IF;
 
-  -- Enforce 'faculty' role for Faculty Coordinator & Staff Advisor
-  IF NEW.designation ILIKE '%faculty%' OR NEW.designation ILIKE '%staff advisor%' THEN
-    NEW.role := 'faculty';
-  ELSIF NEW.role IS NULL OR TRIM(NEW.role) = '' THEN
-    NEW.role := 'editor';
+  -- Default role assignment ONLY IF role is not explicitly specified
+  IF NEW.role IS NULL OR TRIM(NEW.role) = '' THEN
+    IF NEW.designation ILIKE '%faculty%' OR NEW.designation ILIKE '%staff advisor%' THEN
+      NEW.role := 'faculty';
+    ELSE
+      NEW.role := 'editor';
+    END IF;
   END IF;
 
   RETURN NEW;

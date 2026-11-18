@@ -14,7 +14,7 @@ export const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({
   children,
   requiredRole,
 }) => {
-  const { user, isViewer, isSuperAdmin, isAdmin, isEditor, loading } = useAuth();
+  const { user, isViewer, isSuperAdmin, isAdmin, isEditor, isFaculty, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -29,6 +29,11 @@ export const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({
   // If not logged in at all, redirect to /login
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // If user is Faculty Coordinator, seamlessly route them to the Faculty Console
+  if (isFaculty) {
+    return <Navigate to="/faculty/dashboard" replace />;
   }
 
   // If user is ExeCom coordinator (editor), redirect them away from Admin Panel to ExeCom Dashboard

@@ -60,14 +60,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("user_id", userId);
 
       if (roleRecords && roleRecords.length > 0) {
-        // Priority order
+        // Priority order: super_admin > admin > faculty > editor > viewer
         const roles = roleRecords.map((r) => r.role);
         if (roles.includes("super_admin")) return "super_admin";
         if (roles.includes("admin") || roles.includes("lead")) {
           return email === DEFAULT_ADMIN_EMAIL ? "super_admin" : "admin";
         }
-        if (roles.includes("editor")) return "editor";
         if (roles.includes("faculty")) return "faculty";
+        if (roles.includes("editor")) return "editor";
         if (roles.includes("viewer")) return "viewer";
       }
 
@@ -80,13 +80,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .maybeSingle();
 
       if (execomMatch) {
+        const dbRole = (execomMatch as any).role;
+        if (dbRole === "super_admin") return "super_admin";
+        if (dbRole === "admin") return "admin";
         if (
-          (execomMatch as any).role === "faculty" ||
-          (execomMatch.designation && execomMatch.designation.toLowerCase().includes("faculty")) ||
-          (execomMatch.designation && execomMatch.designation.toLowerCase().includes("staff advisor"))
+          dbRole === "faculty" ||
+          (execomMatch.designation && (
+            execomMatch.designation.toLowerCase().includes("faculty") ||
+            execomMatch.designation.toLowerCase().includes("staff advisor")
+          ))
         ) {
           return "faculty";
         }
+        if (dbRole === "viewer") return "viewer";
         return "editor";
       }
     } catch (err) {
@@ -109,6 +115,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsed = JSON.parse(saved);
         if (parsed && parsed.email) {
           setUser(parsed);
+          // Always re-validate the latest live role from the database so dashboard access changes apply immediately!
+          if (isSupabaseConfigured && parsed.id) {
+            fetchRoleForUser(parsed.id, parsed.email).then((latestRole) => {
+              if (latestRole && latestRole !== parsed.role) {
+                const updated = { ...parsed, role: latestRole };
+                setUser(updated);
+                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+              }
+            });
+          }
           // Auto-refresh Supabase Auth session for super admin so RPC/RLS operations have a valid admin JWT
           if (
             isSupabaseConfigured &&
@@ -339,7 +355,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 exMember.designation.toLowerCase().includes("faculty") ||
                 exMember.designation.toLowerCase().includes("staff advisor")
               ));
-            const userRole: AdminRole = (assigned.role as AdminRole) || ((exMember as any).role as AdminRole) || (isFacultyMember ? "faculty" : "editor");
+            const userRole: AdminRole = ((exMember as any).role as AdminRole) || (assigned.role as AdminRole) || (isFacultyMember ? "faculty" : "editor");
             const loggedUser: AuthUser = {
               id: exMember.user_id || exMember.id,
               email: exMember.email || rawInput,

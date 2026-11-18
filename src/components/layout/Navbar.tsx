@@ -25,10 +25,10 @@ const navLinks = [
 export const Navbar: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user, isAdmin, isViewer, isSuperAdmin, isEditor, role, logout } = useAuth();
+  const { user, isAdmin, isViewer, isSuperAdmin, isEditor, isFaculty, role, logout } = useAuth();
   const location = useLocation();
 
-  const isPrivilegedUser = Boolean(user && (isAdmin || isViewer || isSuperAdmin || isEditor));
+  const isPrivilegedUser = Boolean(user && (isAdmin || isViewer || isSuperAdmin || isEditor || isFaculty));
 
   useEffect(() => {
     const handleScroll = () => {
@@ -57,12 +57,14 @@ export const Navbar: React.FC = () => {
 
   const getDashboardLabel = () => {
     if (isSuperAdmin || isAdmin) return "Admin Dashboard";
+    if (isFaculty) return "Faculty Console";
     if (isEditor) return "ExeCom Dashboard";
     return "Dashboard";
   };
 
   const getDashboardUrl = () => {
     if (isSuperAdmin || isAdmin) return "/admin";
+    if (isFaculty) return "/faculty/dashboard";
     if (isEditor) return "/execom/dashboard";
     return "/login";
   };
@@ -70,6 +72,7 @@ export const Navbar: React.FC = () => {
   const getRoleLabel = () => {
     if (isSuperAdmin) return "Super Admin";
     if (isAdmin) return "Admin";
+    if (isFaculty) return "Faculty";
     if (isEditor) return "ExeCom";
     if (isViewer) return "Staff";
     return "Member";

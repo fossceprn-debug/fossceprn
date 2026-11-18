@@ -418,7 +418,7 @@ export const AdminExecom: React.FC = () => {
 
     setCredEmail(suggestedEmail);
     setCredPassword(existingCred?.password || generateSecurePassword());
-    setCredRole((existingCred?.role as AdminRole) || (isFaculty ? "faculty" : (member.role as AdminRole) || "editor"));
+    setCredRole((member.role as AdminRole) || (existingCred?.role as AdminRole) || (isFaculty ? "faculty" : "editor"));
     setCredFeedback(null);
     setProvisionedRecord(null);
     setCopiedSuccess(false);
@@ -875,24 +875,58 @@ Login URL: ${window.location.origin}${loginPath} (or ${window.location.origin}/a
                                 member.designation.toLowerCase().includes("staff advisor")
                               ));
                             const hasKey = Boolean(member.user_id || assigned?.password);
-                            const roleDisplay = assigned?.role || member.role || (isFaculty ? "faculty" : "editor");
+                            // Live database member.role has absolute priority over cached localStorage
+                            const roleDisplay = member.role || assigned?.role || (isFaculty ? "faculty" : "editor");
 
                             if (hasKey) {
+                              const getBadgeStyles = (r: string) => {
+                                switch (r) {
+                                  case "super_admin":
+                                    return "bg-rose-50 text-rose-800 border-rose-200";
+                                  case "admin":
+                                    return "bg-blue-50 text-blue-800 border-blue-200";
+                                  case "faculty":
+                                    return "bg-purple-50 text-purple-800 border-purple-200";
+                                  default:
+                                    return "bg-emerald-50 text-emerald-800 border-emerald-200";
+                                }
+                              };
+                              const getBadgeIconColor = (r: string) => {
+                                switch (r) {
+                                  case "super_admin":
+                                    return "text-rose-600";
+                                  case "admin":
+                                    return "text-blue-600";
+                                  case "faculty":
+                                    return "text-purple-600";
+                                  default:
+                                    return "text-emerald-600";
+                                }
+                              };
+                              const getBadgeTitle = (r: string) => {
+                                switch (r) {
+                                  case "super_admin":
+                                    return "Super Admin";
+                                  case "admin":
+                                    return "Admin";
+                                  case "faculty":
+                                    return "Faculty";
+                                  case "editor":
+                                    return "Editor";
+                                  default:
+                                    return r;
+                                }
+                              };
+
                               return (
                                 <div className="flex items-center gap-1.5">
                                   <span
-                                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold border ${
-                                      roleDisplay === "faculty"
-                                        ? "bg-purple-50 text-purple-800 border-purple-200"
-                                        : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                    }`}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold border ${getBadgeStyles(roleDisplay)}`}
                                   >
                                     <KeyRound
-                                      className={`w-3 h-3 ${
-                                        roleDisplay === "faculty" ? "text-purple-600" : "text-emerald-600"
-                                      }`}
+                                      className={`w-3 h-3 ${getBadgeIconColor(roleDisplay)}`}
                                     />
-                                    <span className="capitalize">{roleDisplay}</span>
+                                    <span>{getBadgeTitle(roleDisplay)}</span>
                                   </span>
                                 </div>
                               );
