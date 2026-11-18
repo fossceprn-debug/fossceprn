@@ -105,7 +105,16 @@ CREATE TABLE IF NOT EXISTS public.events (
   registration_status TEXT NOT NULL DEFAULT 'upcoming' 
     CHECK (registration_status IN ('upcoming', 'open', 'closing_soon', 'closed', 'ended')),
   publication_status TEXT NOT NULL DEFAULT 'draft' 
-    CHECK (publication_status IN ('draft', 'published', 'archived')),
+    CHECK (publication_status IN ('draft', 'pending_approval', 'published', 'rejected', 'archived')),
+  registration_mode TEXT DEFAULT 'onsite' CHECK (registration_mode IN ('onsite', 'gform')),
+  gform_url TEXT,
+  registration_questions JSONB DEFAULT '[]'::jsonb,
+  created_by TEXT,
+  created_by_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  approved_by TEXT,
+  approved_at TIMESTAMPTZ,
+  coordinator_name TEXT,
+  coordinator_phone TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -122,7 +131,16 @@ CREATE TABLE IF NOT EXISTS public.projects (
   github_url TEXT,
   technologies TEXT[] NOT NULL DEFAULT '{}',
   publication_status TEXT NOT NULL DEFAULT 'draft' 
-    CHECK (publication_status IN ('draft', 'published', 'archived')),
+    CHECK (publication_status IN ('draft', 'pending_approval', 'published', 'rejected', 'archived')),
+  registration_mode TEXT DEFAULT 'onsite' CHECK (registration_mode IN ('onsite', 'gform')),
+  gform_url TEXT,
+  registration_questions JSONB DEFAULT '[]'::jsonb,
+  created_by TEXT,
+  created_by_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  approved_by TEXT,
+  approved_at TIMESTAMPTZ,
+  coordinator_name TEXT,
+  coordinator_phone TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -1725,10 +1743,20 @@ NOTIFY pgrst, 'reload schema';
 -- 15. EVENT REGISTRATION MODES & ON-SITE QR CHECK-IN ATTENDANCE
 -- ============================================================================
 
+ALTER TABLE public.events DROP CONSTRAINT IF EXISTS events_publication_status_check;
+ALTER TABLE public.events ADD CONSTRAINT events_publication_status_check
+  CHECK (publication_status IN ('draft', 'pending_approval', 'published', 'rejected', 'archived'));
+
 ALTER TABLE public.events
   ADD COLUMN IF NOT EXISTS registration_mode TEXT DEFAULT 'onsite' CHECK (registration_mode IN ('onsite', 'gform')),
   ADD COLUMN IF NOT EXISTS gform_url TEXT,
-  ADD COLUMN IF NOT EXISTS registration_questions JSONB DEFAULT '[]'::jsonb;
+  ADD COLUMN IF NOT EXISTS registration_questions JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS created_by TEXT,
+  ADD COLUMN IF NOT EXISTS created_by_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS approved_by TEXT,
+  ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS coordinator_name TEXT,
+  ADD COLUMN IF NOT EXISTS coordinator_phone TEXT;
 
 CREATE TABLE IF NOT EXISTS public.event_registrations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

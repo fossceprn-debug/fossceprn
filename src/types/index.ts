@@ -1,4 +1,4 @@
-export type PublicationStatus = "draft" | "published" | "archived";
+export type PublicationStatus = "draft" | "pending_approval" | "published" | "rejected" | "archived";
 export type RegistrationStatus = "upcoming" | "open" | "closing_soon" | "closed" | "ended";
 export type RegistrationMode = "onsite" | "gform";
 export type AdminRole = "super_admin" | "admin" | "editor" | "viewer" | "faculty";
@@ -81,6 +81,12 @@ export interface EventItem {
   registration_mode?: RegistrationMode;
   gform_url?: string | null;
   registration_questions?: RegistrationQuestion[] | null;
+  created_by?: string | null;
+  created_by_id?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  coordinator_name?: string | null;
+  coordinator_phone?: string | null;
   created_at: string;
 }
 

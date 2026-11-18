@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { registerForEvent } from "@/lib/adminService";
+import { generateInvitationPassImage } from "@/lib/passGenerator";
 import type { EventItem, EventRegistration, RegistrationQuestion } from "@/types";
 
 interface EventRegistrationModalProps {
@@ -40,6 +41,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
 }) => {
   const [stage, setStage] = useState<"form" | "ticket">("form");
   const [submitting, setSubmitting] = useState(false);
+  const [downloadingPass, setDownloadingPass] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   // Base Form Fields
@@ -155,12 +157,37 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
     }
   };
 
-  const handleDownloadTicket = () => {
+  const handleDownloadTicket = async () => {
     if (!qrDataUrl || !registration) return;
-    const link = document.createElement("a");
-    link.href = qrDataUrl;
-    link.download = `Ticket-${registration.ticket_code}-${event.slug || "foss"}.png`;
-    link.click();
+    setDownloadingPass(true);
+    try {
+      const passImageUri = await generateInvitationPassImage({
+        eventTitle: event.title,
+        startDate: event.start_date,
+        venue: event.venue,
+        attendeeName: registration.full_name,
+        attendeeEmail: registration.email,
+        attendeePhone: registration.phone,
+        classSemester: registration.class_semester,
+        ticketCode: registration.ticket_code,
+        qrDataUrl: qrDataUrl,
+        coordinatorName: event.coordinator_name,
+        coordinatorPhone: event.coordinator_phone,
+      });
+
+      const link = document.createElement("a");
+      link.href = passImageUri;
+      link.download = `Invitation-Pass-${registration.ticket_code}-${event.slug || "event"}.png`;
+      link.click();
+    } catch (err) {
+      console.error("Failed to generate invitation pass image, downloading raw QR:", err);
+      const link = document.createElement("a");
+      link.href = qrDataUrl;
+      link.download = `Ticket-${registration.ticket_code}.png`;
+      link.click();
+    } finally {
+      setDownloadingPass(false);
+    }
   };
 
   const handlePrint = () => {
@@ -379,8 +406,19 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
               ref={ticketRef}
               className="relative rounded-3xl bg-gradient-to-b from-slate-900 via-emerald-950 to-slate-900 text-white p-6 sm:p-7 border border-emerald-500/30 shadow-2xl overflow-hidden"
             >
+              {/* Official Invitation Pass Heading */}
+              <div className="mb-4 pb-3 border-b border-emerald-500/20 text-center space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-black tracking-wide uppercase">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Invitation Pass For Attending The Event</span>
+                </div>
+                <p className="text-[11px] text-emerald-200/80 font-medium">
+                  FOSS United Students Chapter • College of Engineering Perumon
+                </p>
+              </div>
+
               {/* Top Bar */}
-              <div className="flex items-center justify-between pb-4 border-b border-emerald-500/20">
+              <div className="flex items-center justify-between pb-3 border-b border-emerald-500/20">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-emerald-500 flex items-center justify-center text-white font-black text-xs shadow-sm">
                     F
@@ -395,7 +433,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
               </div>
 
               {/* Event & Attendee Info */}
-              <div className="py-5 space-y-4">
+              <div className="py-4 space-y-3.5">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-emerald-400/80 tracking-wider">
                     Event
@@ -443,6 +481,26 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                       Ph: {registration?.phone}
                     </span>
                   </div>
+                </div>
+
+                {/* Coordinators Contact Details */}
+                <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-1 text-[11px] text-emerald-300/90">
+                  <span className="font-bold text-emerald-400">Event Coordinator:</span>
+                  <span className="font-medium text-slate-200">
+                    {event.coordinator_name || "FOSS CEPrn ExeCom Team"}
+                    {event.coordinator_phone ? ` (Ph: ${event.coordinator_phone})` : ""}
+                  </span>
+                </div>
+
+                {/* Warning Alert Notice */}
+                <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-400/40 text-amber-200 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-amber-300">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>⚠️ SAVE THIS QR CODE PASS! DO NOT MISS IT!</span>
+                  </div>
+                  <p className="text-[11px] text-amber-100/80 leading-relaxed">
+                    Show this QR code pass at the entrance registration desk on the event day for digital check-in and attendance verification.
+                  </p>
                 </div>
               </div>
 
@@ -499,11 +557,21 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={downloadingPass}
                   onClick={handleDownloadTicket}
-                  className="h-10 text-xs gap-1.5 rounded-xl border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                  className="h-10 text-xs font-bold gap-1.5 rounded-xl border-emerald-600 text-emerald-700 hover:bg-emerald-50"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>Download QR Pass</span>
+                  {downloadingPass ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Generating Pass Image...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      <span>Download Invitation Pass (Image)</span>
+                    </>
+                  )}
                 </Button>
                 <Button
                   size="sm"
@@ -520,3 +588,4 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
     </Dialog>
   );
 };
+

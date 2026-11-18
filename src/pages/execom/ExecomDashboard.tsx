@@ -26,6 +26,7 @@ import {
   ChevronRight,
   QrCode,
   Link2,
+  Check,
 } from "lucide-react";
 import { useAuth } from "@/lib/authContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -131,12 +132,37 @@ export const ExecomDashboard: React.FC = () => {
     start_date: "",
     end_date: "",
     cover_image: "",
-    publication_status: "published" as PublicationStatus,
+    publication_status: (isAdmin ? "published" : "pending_approval") as PublicationStatus,
     registration_status: "open" as RegistrationStatus,
     registration_mode: "onsite" as RegistrationMode,
     gform_url: "",
     registration_questions: [] as RegistrationQuestion[],
+    coordinator_name: "",
+    coordinator_phone: "",
+    created_by: user?.full_name || user?.email || "ExeCom Coordinator",
+    created_by_id: user?.id || null,
   });
+
+  const canManageEventAttendees = (evt: EventItem) => {
+    if (isAdmin) return true;
+    if (evt.created_by_id && user?.id && evt.created_by_id === user.id) return true;
+    if (evt.created_by && user?.email && evt.created_by.toLowerCase() === user.email.toLowerCase()) return true;
+    if (evt.coordinator_name && user?.full_name && evt.coordinator_name.toLowerCase().includes(user.full_name.toLowerCase())) return true;
+    return false;
+  };
+
+  const handleApproveEvent = async (evt: EventItem) => {
+    try {
+      await updateEventAdmin(evt.id, {
+        publication_status: "published",
+        approved_by: user?.full_name || user?.email || "Admin",
+        approved_at: new Date().toISOString(),
+      });
+      await loadData();
+    } catch (err: any) {
+      setEventError(err.message || "Failed to approve event.");
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -201,11 +227,15 @@ export const ExecomDashboard: React.FC = () => {
       start_date: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
       end_date: new Date(Date.now() + 86400000 + 7200000).toISOString().slice(0, 16),
       cover_image: "",
-      publication_status: "published",
+      publication_status: isAdmin ? "published" : "pending_approval",
       registration_status: "open",
       registration_mode: "onsite",
       gform_url: "",
       registration_questions: [],
+      coordinator_name: user?.full_name || "",
+      coordinator_phone: "",
+      created_by: user?.full_name || user?.email || "ExeCom Coordinator",
+      created_by_id: user?.id || null,
     });
     setEventError("");
     setEventModalOpen(true);
@@ -226,6 +256,10 @@ export const ExecomDashboard: React.FC = () => {
       registration_mode: evt.registration_mode || "onsite",
       gform_url: evt.gform_url || "",
       registration_questions: evt.registration_questions || [],
+      coordinator_name: evt.coordinator_name || "",
+      coordinator_phone: evt.coordinator_phone || "",
+      created_by: evt.created_by || user?.full_name || user?.email || "",
+      created_by_id: evt.created_by_id || user?.id || null,
     });
     setEventError("");
     setEventModalOpen(true);
@@ -278,10 +312,16 @@ export const ExecomDashboard: React.FC = () => {
     setEventError("");
 
     try {
+      const finalPayload = {
+        ...eventForm,
+        // Non-admin members cannot directly publish events: require Admin/Super Admin approval
+        publication_status: !isAdmin ? ("pending_approval" as PublicationStatus) : eventForm.publication_status,
+      };
+
       if (editingEvent) {
-        await updateEventAdmin(editingEvent.id, eventForm);
+        await updateEventAdmin(editingEvent.id, finalPayload);
       } else {
-        await createEventAdmin(eventForm);
+        await createEventAdmin(finalPayload);
       }
       setEventModalOpen(false);
       await loadData();
@@ -891,10 +931,14 @@ export const ExecomDashboard: React.FC = () => {
                             className={`text-[9px] px-1.5 py-0.5 shrink-0 ${
                               evt.publication_status === "published"
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : evt.publication_status === "pending_approval"
+                                ? "bg-amber-100 text-amber-800 border-amber-300 font-bold"
                                 : "bg-slate-100 text-slate-600"
                             }`}
                           >
-                            {evt.publication_status}
+                            {evt.publication_status === "pending_approval"
+                              ? "⏳ Pending Approval"
+                              : evt.publication_status}
                           </Badge>
                         </div>
 
@@ -916,6 +960,13 @@ export const ExecomDashboard: React.FC = () => {
                             <div className="flex items-center gap-1.5">
                               <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                               <span className="truncate">{evt.venue}</span>
+                            </div>
+                          )}
+
+                          {evt.coordinator_name && (
+                            <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                              <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span className="truncate">Coordinator: {evt.coordinator_name}</span>
                             </div>
                           )}
                         </div>
@@ -949,13 +1000,27 @@ export const ExecomDashboard: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        {evt.registration_mode !== "gform" && (
+                        {/* Admin One-click Approval */}
+                        {isAdmin && evt.publication_status === "pending_approval" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleApproveEvent(evt)}
+                            className="h-7 px-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                            title="Approve and publish this event live to the website"
+                          >
+                            <Check className="w-3.5 h-3.5 mr-1" />
+                            <span>Approve</span>
+                          </Button>
+                        )}
+
+                        {/* Attendees & QR Attendance button (for event creator, admins, and super admins) */}
+                        {canManageEventAttendees(evt) && evt.registration_mode !== "gform" && (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setAttendeesEvent(evt)}
                             className="h-7 px-2 text-xs font-bold text-slate-700 border-slate-200 hover:bg-slate-50"
-                            title="View registered attendees & check-in"
+                            title="View registered students, scan QR code, or mark attendance without QR"
                           >
                             <Users className="w-3.5 h-3.5 mr-1 text-emerald-600" />
                             <span>Attendees</span>
@@ -1335,20 +1400,35 @@ export const ExecomDashboard: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-slate-700">Publication Status</label>
-                <select
-                  value={eventForm.publication_status}
-                  onChange={(e) =>
-                    setEventForm({
-                      ...eventForm,
-                      publication_status: e.target.value as PublicationStatus,
-                    })
-                  }
-                  className="w-full h-9 px-2 text-xs bg-slate-50 border border-slate-200 rounded-lg"
-                >
-                  <option value="published">Published</option>
-                  <option value="draft">Draft</option>
-                  <option value="archived">Archived</option>
-                </select>
+                {isAdmin ? (
+                  <select
+                    value={eventForm.publication_status}
+                    onChange={(e) =>
+                      setEventForm({
+                        ...eventForm,
+                        publication_status: e.target.value as PublicationStatus,
+                      })
+                    }
+                    className="w-full h-9 px-2 text-xs bg-slate-50 border border-slate-200 rounded-lg font-bold"
+                  >
+                    <option value="published">Published (Live on Website)</option>
+                    <option value="pending_approval">Pending Admin Approval</option>
+                    <option value="draft">Draft</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                ) : (
+                  <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center justify-between">
+                    <span>⏳ Pending Admin Approval</span>
+                    <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-normal">
+                      Admin review required
+                    </span>
+                  </div>
+                )}
+                {!isAdmin && (
+                  <p className="text-[11px] text-slate-400">
+                    Non-admin submissions require Super Admin / Admin approval before publishing live to the website.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -1367,6 +1447,33 @@ export const ExecomDashboard: React.FC = () => {
                   <option value="upcoming">Upcoming</option>
                   <option value="closed">Closed</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Coordinator Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Event Coordinator Name
+                </label>
+                <Input
+                  placeholder="e.g. Adithyan M / Shefeena"
+                  value={eventForm.coordinator_name}
+                  onChange={(e) => setEventForm({ ...eventForm, coordinator_name: e.target.value })}
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Coordinator Phone / WhatsApp
+                </label>
+                <Input
+                  placeholder="e.g. 9995601670"
+                  value={eventForm.coordinator_phone}
+                  onChange={(e) => setEventForm({ ...eventForm, coordinator_phone: e.target.value })}
+                  className="h-9 text-xs"
+                />
               </div>
             </div>
 

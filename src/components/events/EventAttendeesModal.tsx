@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { Html5Qrcode } from "html5-qrcode";
 import {
   Users,
   Search,
@@ -15,19 +16,42 @@ import {
   Check,
   Copy,
   Filter,
+  Camera,
+  CameraOff,
+  UserCheck,
+  UserX,
+  Volume2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
-import { getEventRegistrations, checkInAttendee } from "@/lib/adminService";
+import { getEventRegistrations, checkInAttendee, updateAttendeeAttendance } from "@/lib/adminService";
 import type { EventItem, EventRegistration } from "@/types";
 
 interface EventAttendeesModalProps {
   isOpen: boolean;
   onClose: () => void;
   event: EventItem | null;
+}
+
+function playBeepSound() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch {}
 }
 
 export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
@@ -39,6 +63,11 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "checked_in" | "pending">("all");
+
+  // Camera QR Scanner states
+  const [isScanningCamera, setIsScanningCamera] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
   // Quick check-in input
   const [quickCode, setQuickCode] = useState("");
@@ -65,8 +94,101 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
       setCheckInMsg(null);
       setQuickCode("");
       setSearch("");
+      setIsScanningCamera(false);
+    } else {
+      stopCameraScanner();
     }
   }, [isOpen, event?.id]);
+
+  // Clean up camera on unmount or dialog close
+  useEffect(() => {
+    return () => {
+      stopCameraScanner();
+    };
+  }, []);
+
+  const stopCameraScanner = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
+        html5QrCodeRef.current.clear();
+      } catch (err) {
+        console.warn("Error stopping camera scanner:", err);
+      }
+      html5QrCodeRef.current = null;
+    }
+    setIsScanningCamera(false);
+    setCameraError("");
+  };
+
+  const startCameraScanner = async () => {
+    setCameraError("");
+    setIsScanningCamera(true);
+
+    // Give DOM a tick to render element
+    setTimeout(async () => {
+      try {
+        const qrElement = document.getElementById("html5-qr-reader");
+        if (!qrElement) return;
+
+        const scanner = new Html5Qrcode("html5-qr-reader");
+        html5QrCodeRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 220, height: 220 },
+          },
+          (decodedText) => {
+            handleDecodedCode(decodedText);
+          },
+          () => {
+            // Frame parse error - ignore
+          }
+        );
+      } catch (err: any) {
+        console.error("Failed to start camera scanner:", err);
+        setCameraError(err?.message || "Could not access camera. Please check camera permissions.");
+        setIsScanningCamera(false);
+      }
+    }, 150);
+  };
+
+  const handleDecodedCode = async (decodedText: string) => {
+    if (!event) return;
+    let code = decodedText.trim();
+
+    try {
+      const parsed = JSON.parse(decodedText);
+      if (parsed.ticket_code) {
+        code = parsed.ticket_code;
+      }
+    } catch {}
+
+    try {
+      const res = await checkInAttendee(code, event.id);
+      if (res.success && res.registration) {
+        playBeepSound();
+        setCheckInMsg({
+          type: "success",
+          text: `Verified & Present: ${res.registration.full_name} (${res.registration.ticket_code})`,
+        });
+        setRegistrations((prev) =>
+          prev.map((r) => (r.id === res.registration!.id ? res.registration! : r))
+        );
+      } else {
+        setCheckInMsg({
+          type: "error",
+          text: res.error || `Ticket ${code} not found for this event.`,
+        });
+      }
+    } catch (err: any) {
+      setCheckInMsg({ type: "error", text: err.message || "Error processing QR ticket." });
+    }
+  };
 
   const handleQuickCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,12 +199,12 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
     try {
       const res = await checkInAttendee(quickCode.trim(), event.id);
       if (res.success && res.registration) {
+        playBeepSound();
         setCheckInMsg({
           type: "success",
-          text: `Success! Checked in: ${res.registration.full_name} (${res.registration.ticket_code})`,
+          text: `Verified & Present: ${res.registration.full_name} (${res.registration.ticket_code})`,
         });
         setQuickCode("");
-        // Refresh local list
         setRegistrations((prev) =>
           prev.map((r) => (r.id === res.registration!.id ? res.registration! : r))
         );
@@ -99,17 +221,25 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
     }
   };
 
-  const handleToggleCheckIn = async (reg: EventRegistration) => {
+  // Direct manual check-in without QR code
+  const handleToggleAttendance = async (reg: EventRegistration, makePresent: boolean) => {
     if (!event) return;
     try {
-      const res = await checkInAttendee(reg.ticket_code, event.id);
+      const res = await updateAttendeeAttendance(reg.id, makePresent);
       if (res.success && res.registration) {
+        if (makePresent) playBeepSound();
         setRegistrations((prev) =>
           prev.map((r) => (r.id === res.registration!.id ? res.registration! : r))
         );
+        setCheckInMsg({
+          type: "success",
+          text: makePresent
+            ? `Marked Present: ${res.registration.full_name}`
+            : `Marked Absent: ${res.registration.full_name}`,
+        });
       }
     } catch (err) {
-      console.error("Error toggling check-in:", err);
+      console.error("Error setting attendance:", err);
     }
   };
 
@@ -128,7 +258,7 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
       "Email",
       "Phone",
       "Class/Semester",
-      "Checked In",
+      "Attendance Status",
       "Checked In At",
       "Registration Date",
       "Custom Responses",
@@ -140,7 +270,7 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
       `"${r.email}"`,
       `"${r.phone || ""}"`,
       `"${r.class_semester || ""}"`,
-      r.checked_in ? "Yes" : "No",
+      r.checked_in ? "Present (Checked In)" : "Absent (Not Checked In)",
       r.checked_in_at ? `"${formatDate(r.checked_in_at)}"` : '""',
       `"${formatDate(r.created_at)}"`,
       `"${JSON.stringify(r.responses || {}).replace(/"/g, '""')}"`,
@@ -151,7 +281,7 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Attendees-${event.slug || "event"}.csv`);
+    link.setAttribute("download", `Attendance-${event.slug || "event"}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -163,6 +293,7 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
       r.full_name.toLowerCase().includes(q) ||
       r.email.toLowerCase().includes(q) ||
       r.ticket_code.toLowerCase().includes(q) ||
+      (r.phone && r.phone.toLowerCase().includes(q)) ||
       (r.class_semester && r.class_semester.toLowerCase().includes(q));
 
     if (filterStatus === "checked_in") return matchesSearch && r.checked_in;
@@ -183,23 +314,49 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200 mb-1">
                 <Users className="w-3.5 h-3.5" />
-                <span>Attendees & Check-In</span>
+                <span>Attendance & Check-In Desk</span>
               </div>
               <DialogTitle className="text-xl font-bold text-slate-900">
                 {event.title}
               </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Verify QR ticket codes and track physical attendance for this event.
+              <DialogDescription className="text-xs text-slate-500 flex flex-wrap items-center gap-2 pt-0.5">
+                <span>Scan camera QR pass, enter ticket code, or mark student attendance manually without QR.</span>
+                {event.coordinator_name && (
+                  <span className="text-emerald-700 font-semibold">• Coordinator: {event.coordinator_name}</span>
+                )}
               </DialogDescription>
             </div>
 
             <div className="flex items-center gap-2">
               <Button
+                variant={isScanningCamera ? "default" : "outline"}
+                size="sm"
+                onClick={isScanningCamera ? stopCameraScanner : startCameraScanner}
+                className={`h-9 text-xs rounded-xl gap-1.5 font-bold ${
+                  isScanningCamera
+                    ? "bg-rose-600 hover:bg-rose-700 text-white"
+                    : "border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+                }`}
+              >
+                {isScanningCamera ? (
+                  <>
+                    <CameraOff className="w-3.5 h-3.5" />
+                    <span>Stop Camera</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Scan with Camera</span>
+                  </>
+                )}
+              </Button>
+
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={handleExportCSV}
                 disabled={registrations.length === 0}
-                className="h-9 text-xs rounded-xl gap-1.5 border-slate-200"
+                className="h-9 text-xs rounded-xl gap-1.5 border-slate-200 text-slate-700"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Export CSV</span>
@@ -207,6 +364,31 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
             </div>
           </div>
         </DialogHeader>
+
+        {/* Live Camera Scanner Box */}
+        {isScanningCamera && (
+          <div className="p-4 rounded-2xl bg-slate-900 text-white text-center space-y-3">
+            <div className="flex items-center justify-between text-xs text-emerald-300 font-bold px-2">
+              <span className="flex items-center gap-1.5">
+                <Camera className="w-4 h-4 animate-pulse text-emerald-400" />
+                <span>Camera Scanner Active — Point at Attendee QR Code</span>
+              </span>
+              <button
+                onClick={stopCameraScanner}
+                className="text-slate-400 hover:text-white text-xs underline"
+              >
+                Close Camera
+              </button>
+            </div>
+            <div
+              id="html5-qr-reader"
+              className="max-w-xs mx-auto overflow-hidden rounded-2xl border-2 border-emerald-500 shadow-xl bg-black"
+            />
+            {cameraError && (
+              <p className="text-xs text-rose-400 font-semibold">{cameraError}</p>
+            )}
+          </div>
+        )}
 
         {/* Stats & Quick Check-In Bar */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 py-3">
@@ -218,7 +400,7 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
             </div>
             <div className="h-8 w-px bg-slate-200" />
             <div className="text-center">
-              <span className="text-[10px] uppercase font-bold text-emerald-600">Checked In</span>
+              <span className="text-[10px] uppercase font-bold text-emerald-600">Present</span>
               <p className="text-xl font-black text-emerald-600">{totalCheckedIn}</p>
             </div>
             <div className="h-8 w-px bg-slate-200" />
@@ -228,7 +410,7 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
             </div>
           </div>
 
-          {/* Quick Check-in Code Form */}
+          {/* Quick Code / Scanner Input */}
           <div className="md:col-span-2 p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-200">
             <form onSubmit={handleQuickCheckIn} className="flex flex-col sm:flex-row items-center gap-2">
               <div className="relative flex-1 w-full">
@@ -268,12 +450,12 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Search & Status Filters */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-80">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <Input
-              placeholder="Search by name, email, ticket code..."
+              placeholder="Search student by name, email, phone, class..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 h-9 text-xs rounded-xl border-slate-200"
@@ -299,7 +481,7 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                   : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
               }`}
             >
-              Checked In ({totalCheckedIn})
+              Present ({totalCheckedIn})
             </button>
             <button
               onClick={() => setFilterStatus("pending")}
@@ -314,18 +496,18 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
           </div>
         </div>
 
-        {/* Registrations Table */}
+        {/* Registrations & Attendance Table (With 1-click Manual Attendance) */}
         <div className="border border-slate-200/80 rounded-2xl overflow-hidden mt-3">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 uppercase text-[10px] font-bold">
                 <tr>
                   <th className="py-2.5 px-3">Ticket Code</th>
-                  <th className="py-2.5 px-3">Attendee</th>
+                  <th className="py-2.5 px-3">Student Name</th>
                   <th className="py-2.5 px-3">Contact</th>
-                  <th className="py-2.5 px-3">Class/Sem</th>
+                  <th className="py-2.5 px-3">Class/Branch</th>
                   <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
+                  <th className="py-2.5 px-3 text-right">Manual Attendance (No QR)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -367,8 +549,13 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                           </button>
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 font-bold text-slate-800">
-                        {reg.full_name}
+                      <td className="py-2.5 px-3">
+                        <span className="font-bold text-slate-800 block">{reg.full_name}</span>
+                        {reg.checked_in && reg.checked_in_at && (
+                          <span className="text-[10px] text-emerald-600 block">
+                            Present at {formatDate(reg.checked_in_at)}
+                          </span>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-slate-500">
                         <div className="truncate max-w-[170px]">{reg.email}</div>
@@ -382,27 +569,37 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                       <td className="py-2.5 px-3">
                         {reg.checked_in ? (
                           <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] font-bold">
-                            Checked In
+                            ✓ Present
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-slate-500 text-[10px]">
-                            Not Checked In
+                            Pending
                           </Badge>
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                        <Button
-                          size="sm"
-                          variant={reg.checked_in ? "outline" : "default"}
-                          onClick={() => handleToggleCheckIn(reg)}
-                          className={`h-7 px-2.5 text-[11px] font-bold rounded-lg ${
-                            reg.checked_in
-                              ? "text-emerald-700 border-emerald-200 hover:bg-emerald-50"
-                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          }`}
-                        >
-                          {reg.checked_in ? "Checked In" : "Check-In"}
-                        </Button>
+                        {reg.checked_in ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleToggleAttendance(reg, false)}
+                            className="h-7 px-2.5 text-[11px] font-bold rounded-lg text-rose-600 border-rose-200 hover:bg-rose-50"
+                            title="Click to mark absent"
+                          >
+                            <UserX className="w-3 h-3 mr-1" />
+                            <span>Mark Absent</span>
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => handleToggleAttendance(reg, true)}
+                            className="h-7 px-2.5 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                            title="Click to mark present without QR code"
+                          >
+                            <UserCheck className="w-3 h-3 mr-1" />
+                            <span>Mark Present</span>
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))

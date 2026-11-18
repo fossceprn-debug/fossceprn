@@ -84,3 +84,4 @@ CREATE POLICY "Admins and editors can manage events"
     OR (auth.uid() IS NOT NULL)
     OR true
   );
+

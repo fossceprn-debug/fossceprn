@@ -82,6 +82,8 @@ export const AdminEvents: React.FC = () => {
     registration_mode: "onsite" as RegistrationMode,
     gform_url: "",
     registration_questions: [] as RegistrationQuestion[],
+    coordinator_name: "",
+    coordinator_phone: "",
   });
 
   const loadData = async () => {
@@ -122,6 +124,8 @@ export const AdminEvents: React.FC = () => {
       registration_mode: "onsite",
       gform_url: "",
       registration_questions: [],
+      coordinator_name: "",
+      coordinator_phone: "",
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -142,6 +146,8 @@ export const AdminEvents: React.FC = () => {
       registration_mode: evt.registration_mode || "onsite",
       gform_url: evt.gform_url || "",
       registration_questions: evt.registration_questions || [],
+      coordinator_name: evt.coordinator_name || "",
+      coordinator_phone: evt.coordinator_phone || "",
     });
     setErrorMsg("");
     setModalOpen(true);
@@ -220,6 +226,19 @@ export const AdminEvents: React.FC = () => {
       loadData();
     } catch (err) {
       console.error("Error updating status", err);
+    }
+  };
+
+  const handleApprovePublish = async (evt: EventItem) => {
+    try {
+      await updateEventAdmin(evt.id, {
+        publication_status: "published",
+        approved_by: "Admin",
+        approved_at: new Date().toISOString(),
+      });
+      loadData();
+    } catch (err) {
+      console.error("Error approving event", err);
     }
   };
 
@@ -370,17 +389,31 @@ export const AdminEvents: React.FC = () => {
 
                     {/* Publication Status */}
                     <td className="py-3 px-4">
-                      <button
-                        onClick={() => handleTogglePublish(evt)}
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
-                          evt.publication_status === "published"
-                            ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        }`}
-                        title="Click to toggle publish status"
-                      >
-                        {evt.publication_status === "published" ? "Published" : "Draft"}
-                      </button>
+                      {evt.publication_status === "pending_approval" ? (
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            ⏳ Pending Approval
+                          </span>
+                          <button
+                            onClick={() => handleApprovePublish(evt)}
+                            className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300 transition-colors"
+                          >
+                            ✓ Approve & Publish
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleTogglePublish(evt)}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                            evt.publication_status === "published"
+                              ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                          title="Click to toggle publish status"
+                        >
+                          {evt.publication_status === "published" ? "Published" : "Draft"}
+                        </button>
+                      )}
                     </td>
 
                     {/* Actions */}
@@ -550,9 +583,37 @@ export const AdminEvents: React.FC = () => {
                   className="h-9 w-full px-3 rounded-xl border border-slate-200 text-xs bg-white font-bold"
                 >
                   <option value="draft">Draft (Hidden from public)</option>
+                  <option value="pending_approval">Pending Admin Approval</option>
                   <option value="published">Published (Live on Website)</option>
                   <option value="archived">Archived</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Coordinator Info */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Event Coordinator Name
+                </label>
+                <Input
+                  placeholder="e.g. Adithyan / Shefeena"
+                  value={formData.coordinator_name}
+                  onChange={(e) => setFormData({ ...formData, coordinator_name: e.target.value })}
+                  className="h-9 text-xs rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Coordinator Phone / WhatsApp
+                </label>
+                <Input
+                  placeholder="e.g. 9876543210"
+                  value={formData.coordinator_phone}
+                  onChange={(e) => setFormData({ ...formData, coordinator_phone: e.target.value })}
+                  className="h-9 text-xs rounded-xl"
+                />
               </div>
             </div>
 

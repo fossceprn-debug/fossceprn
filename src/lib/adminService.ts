@@ -784,6 +784,12 @@ export async function createEventAdmin(event: Partial<EventItem>): Promise<Event
     registration_mode: event.registration_mode || "onsite",
     gform_url: event.gform_url || null,
     registration_questions: event.registration_questions || [],
+    created_by: event.created_by || null,
+    created_by_id: event.created_by_id || null,
+    approved_by: event.approved_by || null,
+    approved_at: event.approved_at || null,
+    coordinator_name: event.coordinator_name || null,
+    coordinator_phone: event.coordinator_phone || null,
     created_at: new Date().toISOString(),
   };
 
@@ -807,6 +813,12 @@ export async function createEventAdmin(event: Partial<EventItem>): Promise<Event
             registration_mode: newEvent.registration_mode,
             gform_url: newEvent.gform_url,
             registration_questions: newEvent.registration_questions,
+            created_by: newEvent.created_by,
+            created_by_id: newEvent.created_by_id,
+            approved_by: newEvent.approved_by,
+            approved_at: newEvent.approved_at,
+            coordinator_name: newEvent.coordinator_name,
+            coordinator_phone: newEvent.coordinator_phone,
           },
         ])
         .select()
@@ -1065,6 +1077,54 @@ export async function checkInAttendee(
   }
 
   return { success: false, error: "Registration not found with ticket code: " + code };
+}
+
+export async function updateAttendeeAttendance(
+  registrationId: string,
+  checkedIn: boolean
+): Promise<{ success: boolean; registration?: EventRegistration; error?: string }> {
+  const now = checkedIn ? new Date().toISOString() : null;
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from("event_registrations")
+        .update({ checked_in: checkedIn, checked_in_at: now })
+        .eq("id", registrationId)
+        .select()
+        .single();
+
+      if (!error && data) {
+        const cached = getStoredEventRegistrations();
+        saveStoredEventRegistrations(
+          cached.map((r) => (r.id === data.id ? (data as EventRegistration) : r))
+        );
+        return { success: true, registration: data as EventRegistration };
+      }
+    } catch (err: any) {
+      console.warn("Supabase attendance update error:", err);
+    }
+  }
+
+  const cached = getStoredEventRegistrations();
+  const idx = cached.findIndex((r) => r.id === registrationId);
+  if (idx >= 0) {
+    cached[idx].checked_in = checkedIn;
+    cached[idx].checked_in_at = now;
+    saveStoredEventRegistrations(cached);
+    return { success: true, registration: cached[idx] };
+  }
+  return { success: false, error: "Registration not found" };
+}
+
+export async function approveEventAdmin(
+  eventId: string,
+  approverName: string
+): Promise<EventItem> {
+  return updateEventAdmin(eventId, {
+    publication_status: "published",
+    approved_by: approverName,
+    approved_at: new Date().toISOString(),
+  });
 }
 
 // ----------------------------------------------------------------------------
