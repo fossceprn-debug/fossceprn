@@ -70,8 +70,8 @@ const WHITE = "#ffffff";
 const SIGNATURES = [
   {
     src: sigCommunityLeadBase64,
-    name: "Ms. ABIYA DANIEL",
-    role: "COMMUNITY LEAD",
+    name: "Abiya Daniel",
+    role: "Event Lead, FOSS CEPRN",
   },
   {
     src: sigFaculty1Base64,
@@ -174,9 +174,14 @@ async function addPdfImage(
     const finalX = x + (width - size.width) / 2;
     const finalY = y + (height - size.height) / 2;
 
+    const format =
+      src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg")
+        ? "JPEG"
+        : "PNG";
+
     doc.addImage(
       src,
-      "PNG",
+      format,
       finalX,
       finalY,
       size.width,
@@ -929,6 +934,14 @@ async function drawPdfSignatures(
     doc.setFontSize(6.2);
     doc.setTextColor(70, 70, 70);
 
+    fitText(
+      doc,
+      signature.role,
+      48,
+      6.2,
+      4.8
+    );
+
     doc.text(
       signature.role,
       center,
@@ -1641,7 +1654,15 @@ async function drawCanvasSignatures(
     // Designation.
     ctx.fillStyle = "#555555";
 
-    ctx.font = "2.1px Arial";
+    canvasFitFont(
+      ctx,
+      signature.role,
+      48,
+      2.1,
+      1.5,
+      "Arial",
+      "normal"
+    );
 
     ctx.fillText(
       signature.role,
