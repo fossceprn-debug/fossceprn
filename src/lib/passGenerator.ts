@@ -1,15 +1,16 @@
 // ============================================================================
 // Official FOSS CEPrn Event Pass Generator
-// Vertical Portrait Pass Format — Matching Official Perumon Chapter Design
+// Matching the Official Preview Pass Design Exactly
 //
-// Key Features:
-// 1. Portrait orientation (width: 720, height: 1100).
+// Key Specifications:
+// 1. Portrait orientation (width: 720, height: 1320).
 // 2. Dynamic event theme colors: Each event gets a distinct, vibrant palette.
-// 3. Prominently displays Participant's Name in a big, bold way.
-// 4. Ticket notch cutouts on left and right borders with dashed perforation line.
-// 5. Scannable QR Code with center FOSS badge & vertical diamond accent rules.
-// 6. Solid theme-colored ticket code pill & Registered Attendee / Coordinator cards.
-// 7. Generates ultra-crisp high-res PNG & Portrait PDF ticket (A4 centered).
+// 3. Top Banner in primaryDark with white FOSS badge, Chapter subtitle & INVITATION title.
+// 4. Prominently displays Participant's Name in a big, bold way with color accent bar.
+// 5. 2-column Date & Venue box with themed icons and soft tint background.
+// 6. Large scannable QR Code section in primaryDark with white container card.
+// 7. Solid theme-colored ticket code pill & Registered Attendee / Coordinator details card.
+// 8. Generates ultra-crisp high-res PNG & Portrait PDF ticket (A4 centered).
 // ============================================================================
 
 import { formatDate } from "./utils";
@@ -206,7 +207,7 @@ export interface InvitationPassOptions {
 }
 
 /**
- * Draws a rounded rectangle path.
+ * Helper to draw a rounded rectangle.
  */
 function roundRect(
   ctx: CanvasRenderingContext2D,
@@ -228,57 +229,15 @@ function roundRect(
 }
 
 /**
- * Creates the outer portrait ticket path with rounded corners and side semicircular cutouts.
- */
-function createPortraitTicketPath(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  r: number,
-  notchY: number,
-  notchR: number
-) {
-  ctx.beginPath();
-  // Top edge
-  ctx.moveTo(r, 0);
-  ctx.lineTo(w - r, 0);
-  ctx.arcTo(w, 0, w, r, r);
-
-  // Right edge down to notch
-  ctx.lineTo(w, notchY - notchR);
-  // Right notch inward
-  ctx.arc(w, notchY, notchR, -Math.PI / 2, Math.PI / 2, true);
-  // Right edge to bottom
-  ctx.lineTo(w, h - r);
-  ctx.arcTo(w, h, w - r, h, r);
-
-  // Bottom edge
-  ctx.lineTo(r, h);
-  ctx.arcTo(0, h, 0, h - r, r);
-
-  // Left edge up to notch
-  ctx.lineTo(0, notchY + notchR);
-  // Left notch inward
-  ctx.arc(0, notchY, notchR, Math.PI / 2, -Math.PI / 2, true);
-  // Left edge to top
-  ctx.lineTo(0, r);
-  ctx.arcTo(0, 0, r, 0, r);
-  ctx.closePath();
-}
-
-/**
- * Generates an ultra-crisp high-resolution portrait invitation pass PNG matching the official Perumon Chapter design.
- * Canvas resolution: 720 x 1100 px.
+ * Generates an ultra-crisp high-resolution portrait invitation pass PNG matching the preview card exactly.
+ * Canvas resolution: 720 x 1320 px.
  */
 export async function generateInvitationPassImage(
   options: InvitationPassOptions
 ): Promise<string> {
-  // Portrait, print-friendly pass. Keep the QR region large and unobstructed.
   const width = 720;
-  const height = 1100;
-  const cornerR = 30;
-  const notchY = 455;
-  const notchR = 18;
+  const height = 1320;
+  const cornerR = 36;
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -294,354 +253,326 @@ export async function generateInvitationPassImage(
       title: options.eventTitle,
     });
 
-  const cx = width / 2;
-  const margin = 54;
-  const contentW = width - margin * 2;
+  const cx = width / 2; // 360
 
-  // Ticket silhouette with side punch/cut notches.
+  // 1. Clip outer rounded card
   ctx.save();
-  createPortraitTicketPath(ctx, width, height, cornerR, notchY, notchR);
+  roundRect(ctx, 0, 0, width, height, cornerR);
   ctx.clip();
+
+  // 2. White Card Background
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
-  // Minimal corner accents; keep the main content clean and formal.
-  ctx.fillStyle = theme.softTint;
+  // 3. Top Banner (primaryDark with decorative background circles)
+  const bannerH = 260;
+  ctx.fillStyle = theme.primaryDark;
+  ctx.fillRect(0, 0, width, bannerH);
+
+  // Decorative translucent circles
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(230, 0);
-  ctx.bezierCurveTo(130, 38, 58, 112, 0, 210);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = theme.primaryLight + "24";
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(145, 0);
-  ctx.bezierCurveTo(80, 32, 35, 82, 0, 145);
-  ctx.closePath();
+  ctx.arc(width - 40, -20, 140, 0, Math.PI * 2);
   ctx.fill();
 
-  // Bottom subtle waves, below the QR and ticket code.
-  ctx.fillStyle = theme.softTint;
   ctx.beginPath();
-  ctx.moveTo(0, height - 120);
-  ctx.bezierCurveTo(150, height - 165, 360, height - 78, width, height - 125);
-  ctx.lineTo(width, height);
-  ctx.lineTo(0, height);
-  ctx.closePath();
+  ctx.arc(40, bannerH + 40, 140, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = theme.primary + "18";
-  ctx.beginPath();
-  ctx.moveTo(0, height - 85);
-  ctx.bezierCurveTo(190, height - 132, 440, height - 45, width, height - 82);
-  ctx.lineTo(width, height);
-  ctx.lineTo(0, height);
-  ctx.closePath();
+  ctx.restore();
+
+  // Brand Row inside Banner
+  const brandY = 40;
+  const badgeW = 90;
+  const badgeH = 46;
+  const badgeX = 50;
+
+  // White FOSS badge
+  ctx.fillStyle = "#ffffff";
+  roundRect(ctx, badgeX, brandY, badgeW, badgeH, 14);
   ctx.fill();
 
-  // Header: organization identity only — no coordinator name at the top.
-  const badgeX = margin;
-  const badgeY = 38;
-  const badgeW = 74;
-  const badgeH = 42;
-  ctx.fillStyle = theme.primary;
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 12);
-  ctx.fill();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "900 18px system-ui, -apple-system, sans-serif";
-  ctx.fillText("FOSS", badgeX + badgeW / 2, badgeY + badgeH / 2);
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "900 22px system-ui, -apple-system, sans-serif";
+  ctx.fillText("FOSS", badgeX + badgeW / 2, brandY + badgeH / 2);
 
-  ctx.strokeStyle = theme.borderTint;
-  ctx.lineWidth = 1.5;
+  // Vertical line
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+  ctx.lineWidth = 1.8;
   ctx.beginPath();
-  ctx.moveTo(badgeX + badgeW + 16, badgeY + 5);
-  ctx.lineTo(badgeX + badgeW + 16, badgeY + badgeH - 5);
+  ctx.moveTo(badgeX + badgeW + 16, brandY + 4);
+  ctx.lineTo(badgeX + badgeW + 16, brandY + badgeH - 4);
   ctx.stroke();
 
-  const headX = badgeX + badgeW + 30;
+  // Chapter Name
   ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = theme.primaryDark;
-  ctx.font = "800 16px system-ui, -apple-system, sans-serif";
-  ctx.fillText("FOSS UNITED STUDENTS CHAPTER", headX, badgeY + 18);
-  ctx.fillStyle = "#64748b";
-  ctx.font = "600 12px system-ui, -apple-system, sans-serif";
-  ctx.fillText("COLLEGE OF ENGINEERING PERUMON", headX, badgeY + 36);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 15px system-ui, -apple-system, sans-serif";
+  ctx.fillText("FOSS UNITED STUDENTS CHAPTER", badgeX + badgeW + 28, brandY + 18);
 
-  // Formal pass title.
+  ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+  ctx.font = "700 11px system-ui, -apple-system, sans-serif";
+  ctx.fillText("COLLEGE OF ENGINEERING PERUMON", badgeX + badgeW + 28, brandY + 36);
+
+  // Banner Title: INVITATION
   ctx.textAlign = "center";
-  ctx.fillStyle = theme.primaryDark;
-  ctx.font = "900 36px system-ui, -apple-system, sans-serif";
-  ctx.fillText("OFFICIAL ENTRY PASS", cx, 135);
-  ctx.strokeStyle = theme.primary;
-  ctx.lineWidth = 1.5;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+  ctx.font = "900 12px system-ui, -apple-system, sans-serif";
+  ctx.fillText("OFFICIAL ENTRY PASS", cx, 140);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 46px system-ui, -apple-system, sans-serif";
+  ctx.fillText("INVITATION", cx, 190);
+
+  // Subtitle with flanking lines
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.lineWidth = 1.4;
+
   ctx.beginPath();
-  ctx.moveTo(cx - 150, 157);
-  ctx.lineTo(cx - 90, 157);
-  ctx.moveTo(cx + 90, 157);
-  ctx.lineTo(cx + 150, 157);
+  ctx.moveTo(cx - 210, 222);
+  ctx.lineTo(cx - 130, 222);
   ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 130, 222);
+  ctx.lineTo(cx + 210, 222);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+  ctx.font = "800 12px system-ui, -apple-system, sans-serif";
+  ctx.fillText("FOR ATTENDING THE EVENT", cx, 226);
+
+  // 4. Participant Section
+  ctx.textAlign = "center";
   ctx.fillStyle = theme.primary;
-  ctx.font = "700 12px system-ui, -apple-system, sans-serif";
-  ctx.fillText("AUTHORIZED EVENT ATTENDEE", cx, 161);
+  ctx.font = "900 12px system-ui, -apple-system, sans-serif";
+  ctx.fillText("THIS PASS IS ISSUED TO", cx, 305);
 
-  // Participant name is the main visual focal point.
-  const attendeeName = (options.attendeeName || "PARTICIPANT").trim().toUpperCase();
+  const attendeeName = options.attendeeName.trim().toUpperCase();
+  let nameSize = 34;
+  if (attendeeName.length > 26) nameSize = 28;
+  else if (attendeeName.length > 20) nameSize = 31;
+
   ctx.fillStyle = theme.primaryDark;
-  ctx.font = "900 34px system-ui, -apple-system, sans-serif";
-  let attendeeFont = 34;
-  while (ctx.measureText(attendeeName).width > contentW - 16 && attendeeFont > 22) {
-    attendeeFont -= 1;
-    ctx.font = `900 ${attendeeFont}px system-ui, -apple-system, sans-serif`;
-  }
-  ctx.fillText(attendeeName, cx, 205);
+  ctx.font = `900 ${nameSize}px system-ui, -apple-system, sans-serif`;
+  ctx.fillText(attendeeName, cx, 350);
 
-  // Event name: fit within the card width rather than overflowing.
-  const eventTitle = (options.eventTitle || "EVENT").trim();
-  ctx.fillStyle = "#1e293b";
-  let eventFont = 23;
-  ctx.font = `800 ${eventFont}px system-ui, -apple-system, sans-serif`;
-  while (ctx.measureText(eventTitle).width > contentW - 20 && eventFont > 16) {
-    eventFont -= 1;
-    ctx.font = `800 ${eventFont}px system-ui, -apple-system, sans-serif`;
-  }
-  ctx.fillText(eventTitle, cx, 239);
-
-  // Date and venue information in a compact two-column official details panel.
-  const infoY = 260;
-  const infoH = 76;
-  ctx.fillStyle = theme.softTint;
-  roundRect(ctx, margin, infoY, contentW, infoH, 15);
+  // Center accent bar
+  ctx.fillStyle = theme.primary;
+  roundRect(ctx, cx - 35, 368, 70, 5, 2.5);
   ctx.fill();
+
+  // Event Title
+  const eventTitle = options.eventTitle.trim();
+  let titleSize = 24;
+  if (eventTitle.length > 32) titleSize = 20;
+  ctx.fillStyle = "#1e293b";
+  ctx.font = `bold ${titleSize}px system-ui, -apple-system, sans-serif`;
+  ctx.fillText(eventTitle, cx, 412);
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "700 11px system-ui, -apple-system, sans-serif";
+  ctx.fillText("EVENT PARTICIPANT", cx, 436);
+
+  // 5. Date & Venue 2-Column Box
+  const boxX = 45;
+  const boxY = 460;
+  const boxW = width - 90;
+  const boxH = 76;
+
+  ctx.fillStyle = theme.softTint;
+  roundRect(ctx, boxX, boxY, boxW, boxH, 18);
+  ctx.fill();
+
   ctx.strokeStyle = theme.borderTint;
   ctx.lineWidth = 1.4;
-  roundRect(ctx, margin, infoY, contentW, infoH, 15);
+  roundRect(ctx, boxX, boxY, boxW, boxH, 18);
   ctx.stroke();
+
+  // Vertical divider
   ctx.beginPath();
-  ctx.moveTo(cx, infoY + 10);
-  ctx.lineTo(cx, infoY + infoH - 10);
+  ctx.moveTo(cx, boxY + 12);
+  ctx.lineTo(cx, boxY + boxH - 12);
   ctx.stroke();
 
-  drawCalendarIcon(ctx, margin + 18, infoY + 18, theme.primary);
-  let dateLine = formatDate(options.startDate);
-  let timeLine = "";
-  try {
-    const dt = new Date(options.startDate);
-    if (!isNaN(dt.getTime())) {
-      dateLine = dt.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-      timeLine = dt.toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
-    }
-  } catch {
-    // Keep the fallback formatted date.
-  }
+  // Left: Date
+  drawCalendarIcon(ctx, boxX + 16, boxY + 18, theme.primary);
   ctx.textAlign = "left";
-  ctx.fillStyle = theme.primary;
+  ctx.fillStyle = "#94a3b8";
   ctx.font = "800 10px system-ui, -apple-system, sans-serif";
-  ctx.fillText("DATE & TIME", margin + 54, infoY + 22);
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "700 14px system-ui, -apple-system, sans-serif";
-  ctx.fillText(dateLine, margin + 54, infoY + 43);
-  ctx.fillStyle = "#64748b";
-  ctx.font = "600 11px system-ui, -apple-system, sans-serif";
-  ctx.fillText(timeLine || "As scheduled", margin + 54, infoY + 60);
+  ctx.fillText("DATE", boxX + 54, boxY + 30);
 
-  drawLocationIcon(ctx, cx + 18, infoY + 18, theme.primary);
-  const venue = (options.venue || "Campus / Online").trim();
-  ctx.fillStyle = theme.primary;
+  ctx.fillStyle = theme.primaryDark;
+  ctx.font = "900 14px system-ui, -apple-system, sans-serif";
+  ctx.fillText(formatDate(options.startDate), boxX + 54, boxY + 50);
+
+  // Right: Venue
+  drawLocationIcon(ctx, cx + 16, boxY + 18, theme.primary);
+  ctx.fillStyle = "#94a3b8";
   ctx.font = "800 10px system-ui, -apple-system, sans-serif";
-  ctx.fillText("VENUE", cx + 48, infoY + 22);
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "700 13px system-ui, -apple-system, sans-serif";
-  let venueFont = 13;
-  while (ctx.measureText(venue).width > width - (cx + 48) - margin - 8 && venueFont > 10) {
-    venueFont -= 1;
-    ctx.font = `700 ${venueFont}px system-ui, -apple-system, sans-serif`;
-  }
-  ctx.fillText(venue, cx + 48, infoY + 43);
-  ctx.fillStyle = "#64748b";
-  ctx.font = "600 11px system-ui, -apple-system, sans-serif";
-  ctx.fillText("Event location", cx + 48, infoY + 60);
+  ctx.fillText("VENUE", cx + 54, boxY + 30);
 
-  // Attendee details card. Coordinator information is moved to the bottom footer.
-  const attendeeBoxY = 350;
-  const attendeeBoxH = 68;
-  ctx.fillStyle = "#ffffff";
-  roundRect(ctx, margin, attendeeBoxY, contentW, attendeeBoxH, 14);
+  ctx.fillStyle = theme.primaryDark;
+  ctx.font = "900 14px system-ui, -apple-system, sans-serif";
+  const venueTrunc =
+    options.venue && options.venue.length > 20
+      ? options.venue.substring(0, 18) + "..."
+      : options.venue || "College Campus";
+  ctx.fillText(venueTrunc, cx + 54, boxY + 50);
+
+  // 6. QR Code Section (Inside dark card matching preview)
+  const qrCardY = 560;
+  const qrCardW = width - 90;
+  const qrCardH = 370;
+
+  ctx.fillStyle = theme.primaryDark;
+  roundRect(ctx, boxX, qrCardY, qrCardW, qrCardH, 24);
   ctx.fill();
-  ctx.strokeStyle = theme.borderTint;
-  ctx.lineWidth = 1.3;
-  roundRect(ctx, margin, attendeeBoxY, contentW, attendeeBoxH, 14);
-  ctx.stroke();
-  ctx.textAlign = "left";
-  ctx.fillStyle = theme.primary;
-  ctx.font = "800 10px system-ui, -apple-system, sans-serif";
-  ctx.fillText("REGISTERED ATTENDEE", margin + 16, attendeeBoxY + 20);
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "700 14px system-ui, -apple-system, sans-serif";
-  const attendeeLabel = options.attendeeName || "Participant";
-  ctx.fillText(attendeeLabel.length > 38 ? attendeeLabel.slice(0, 35) + "..." : attendeeLabel, margin + 16, attendeeBoxY + 39);
-  ctx.fillStyle = "#64748b";
-  ctx.font = "600 11px system-ui, -apple-system, sans-serif";
-  const attendeeSub = options.classSemester || options.attendeeEmail || options.attendeePhone || "Registered attendee";
-  ctx.fillText(attendeeSub.length > 70 ? attendeeSub.slice(0, 67) + "..." : attendeeSub, margin + 16, attendeeBoxY + 55);
 
-  // Dashed perforation line and side cut-outs.
-  ctx.save();
-  ctx.strokeStyle = theme.borderTint;
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([6, 6]);
-  ctx.beginPath();
-  ctx.moveTo(notchR + 9, notchY);
-  ctx.lineTo(width - notchR - 9, notchY);
-  ctx.stroke();
-  ctx.restore();
+  // Heading inside QR Card
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 11px system-ui, -apple-system, sans-serif";
+  ctx.fillText("── ENTRY VERIFICATION ──", cx, qrCardY + 32);
 
-  // QR: larger, centered, and kept clear for reliable scanning.
-  const qrSize = 320;
-  const qrY = 485;
-  const qrX = cx - qrSize / 2;
+  // White QR container card with shadow
+  const qrInnerPad = 14;
+  const qrImgSize = 230;
+  const qrCardInnerW = qrImgSize + qrInnerPad * 2;
+  const qrCardInnerH = qrImgSize + qrInnerPad * 2;
+  const qrInnerX = cx - qrCardInnerW / 2;
+  const qrInnerY = qrCardY + 48;
+
   ctx.save();
   ctx.fillStyle = "#ffffff";
-  ctx.shadowColor = "rgba(15, 23, 42, 0.10)";
-  ctx.shadowBlur = 12;
-  ctx.shadowOffsetY = 3;
-  roundRect(ctx, qrX, qrY, qrSize, qrSize, 18);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
+  ctx.shadowBlur = 16;
+  ctx.shadowOffsetY = 6;
+  roundRect(ctx, qrInnerX, qrInnerY, qrCardInnerW, qrCardInnerH, 18);
   ctx.fill();
   ctx.restore();
-  ctx.strokeStyle = theme.primary;
-  ctx.lineWidth = 2.5;
-  roundRect(ctx, qrX, qrY, qrSize, qrSize, 18);
-  ctx.stroke();
 
+  // QR Code Image
   const qrImg = new Image();
   qrImg.src = options.qrDataUrl;
-  await new Promise<void>((resolve) => {
-    qrImg.onload = () => resolve();
-    qrImg.onerror = () => resolve();
+  await new Promise((res) => {
+    qrImg.onload = () => res(true);
+    qrImg.onerror = () => res(false);
   });
-  if (qrImg.complete && qrImg.naturalWidth > 0) {
-    const qrPad = 15;
-    ctx.drawImage(qrImg, qrX + qrPad, qrY + qrPad, qrSize - qrPad * 2, qrSize - qrPad * 2);
-  }
+  ctx.drawImage(qrImg, qrInnerX + qrInnerPad, qrInnerY + qrInnerPad, qrImgSize, qrImgSize);
 
-  // Small centered label requested: IEPRN. Keep it compact to protect QR readability.
-  const centerBadgeW = 62;
-  const centerBadgeH = 28;
-  const centerBadgeX = cx - centerBadgeW / 2;
-  const centerBadgeY = qrY + qrSize / 2 - centerBadgeH / 2;
-  ctx.fillStyle = "#ffffff";
-  roundRect(ctx, centerBadgeX - 4, centerBadgeY - 4, centerBadgeW + 8, centerBadgeH + 8, 8);
-  ctx.fill();
-  ctx.fillStyle = theme.primary;
-  roundRect(ctx, centerBadgeX, centerBadgeY, centerBadgeW, centerBadgeH, 6);
-  ctx.fill();
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+  // QR Bottom Text
   ctx.fillStyle = "#ffffff";
   ctx.font = "900 12px system-ui, -apple-system, sans-serif";
-  ctx.fillText("ieprn", cx, centerBadgeY + centerBadgeH / 2);
+  ctx.fillText("SCAN QR CODE FOR ENTRY CHECK-IN", cx, qrCardY + qrCardH - 30);
 
-  // Ticket code directly below QR in a solid, high-contrast pill.
-  const codeY = qrY + qrSize + 20;
-  const codeW = 300;
-  const codeH = 44;
-  const codeX = cx - codeW / 2;
-  ctx.fillStyle = theme.primaryDark;
-  roundRect(ctx, codeX, codeY, codeW, codeH, 22);
-  ctx.fill();
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "900 20px monospace";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(options.ticketCode, cx, codeY + codeH / 2);
-
-  ctx.fillStyle = theme.primary;
-  ctx.font = "800 11px system-ui, -apple-system, sans-serif";
-  ctx.fillText("SCAN QR CODE FOR ENTRY VERIFICATION", cx, codeY + codeH + 19);
-  ctx.fillStyle = theme.primaryDark;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
   ctx.font = "700 10px system-ui, -apple-system, sans-serif";
-  ctx.fillText("KEEP THIS PASS READY AT THE ENTRY DESK", cx, codeY + codeH + 39);
+  ctx.fillText("FOSS UNITED STUDENTS CHAPTER", cx, qrCardY + qrCardH - 14);
 
-  // Coordinator name is only shown as a small footer, not at the top.
-  const coordinator1 = options.coordinator1Name || options.coordinatorName || "FOSS CEPerumon Chapter";
-  const coordinator1Phone = options.coordinator1Phone || options.coordinatorPhone || "";
-  const coordinator2 = options.coordinator2Name || "";
-  const coordinator2Phone = options.coordinator2Phone || "";
-  const coordinatorDetails = [
-    coordinator1Phone ? `${coordinator1} • ${coordinator1Phone}` : coordinator1,
-    coordinator2 ? (coordinator2Phone ? `${coordinator2} • ${coordinator2Phone}` : coordinator2) : "",
-  ].filter(Boolean).join("  |  ");
-  const coordinatorFooter = `EVENT COORDINATOR: ${coordinatorDetails}`;
-  ctx.fillStyle = "#475569";
-  ctx.font = "600 9px system-ui, -apple-system, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText(coordinatorFooter.length > 90 ? coordinatorFooter.slice(0, 87) + "..." : coordinatorFooter, cx, 1040);
+  // 7. Ticket Code Pill
+  const pillY = 955;
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "900 11px system-ui, -apple-system, sans-serif";
+  ctx.fillText("YOUR UNIQUE TICKET NUMBER", cx, pillY);
+
+  const codePillW = 320;
+  const codePillH = 50;
+  const codePillX = cx - codePillW / 2;
+  const codePillY = pillY + 12;
+
   ctx.fillStyle = theme.primaryDark;
-  ctx.font = "800 9px system-ui, -apple-system, sans-serif";
-  ctx.fillText("FOSS UNITED STUDENTS CHAPTER • COLLEGE OF ENGINEERING PERUMON", cx, 1060);
+  roundRect(ctx, codePillX, codePillY, codePillW, codePillH, 25);
+  ctx.fill();
 
-  // Restore clip and draw the clean ticket outline.
-  ctx.restore();
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 22px monospace";
+  ctx.fillText(options.ticketCode, cx, codePillY + codePillH / 2 + 1);
+
+  // 8. Attendee & Coordinator Details Box
+  const infoY = 1045;
+  const infoW = width - 90;
+  const infoH = 145;
+
+  ctx.strokeStyle = theme.borderTint;
+  ctx.lineWidth = 1.4;
+  roundRect(ctx, boxX, infoY, infoW, infoH, 18);
+  ctx.stroke();
+
+  // Attendee Section
+  ctx.textAlign = "left";
+  ctx.fillStyle = theme.primary;
+  ctx.font = "900 11px system-ui, -apple-system, sans-serif";
+  ctx.fillText("REGISTERED ATTENDEE", boxX + 20, infoY + 24);
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "900 15px system-ui, -apple-system, sans-serif";
+  ctx.fillText(options.attendeeName, boxX + 20, infoY + 44);
+
+  ctx.fillStyle = "#64748b";
+  ctx.font = "600 12px system-ui, -apple-system, sans-serif";
+  const subText = options.classSemester
+    ? `${options.attendeeEmail} • ${options.classSemester}`
+    : options.attendeeEmail;
+  ctx.fillText(subText, boxX + 20, infoY + 62);
+
+  // Divider
+  ctx.strokeStyle = theme.borderTint;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(boxX + 20, infoY + 76);
+  ctx.lineTo(boxX + infoW - 20, infoY + 76);
+  ctx.stroke();
+
+  // Coordinator Section
+  ctx.fillStyle = theme.primary;
+  ctx.font = "900 11px system-ui, -apple-system, sans-serif";
+  ctx.fillText("EVENT COORDINATORS", boxX + 20, infoY + 98);
+
+  const coordNames = [
+    options.coordinator1Name || options.coordinatorName,
+    options.coordinator2Name,
+  ].filter(Boolean).join(" & ") || "FOSS Chapter Lead";
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 13px system-ui, -apple-system, sans-serif";
+  ctx.fillText(coordNames, boxX + 20, infoY + 116);
+
+  const coordPhones = [
+    options.coordinator1Phone || options.coordinatorPhone,
+    options.coordinator2Phone,
+  ].filter(Boolean).join(" • ");
+
+  if (coordPhones) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = "600 11px system-ui, -apple-system, sans-serif";
+    ctx.fillText(`Ph: ${coordPhones}`, boxX + 20, infoY + 132);
+  }
+
+  // 9. Important Notice
+  ctx.textAlign = "center";
+  ctx.fillStyle = theme.primaryDark;
+  ctx.font = "900 12px system-ui, -apple-system, sans-serif";
+  ctx.fillText("• SAVE THIS PASS • SHOW AT ENTRY DESK •", cx, 1222);
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "600 10px system-ui, -apple-system, sans-serif";
+  ctx.fillText("This pass is issued specifically to the registered participant.", cx, 1242);
+
+  // 10. Bottom Theme Strip
+  ctx.fillStyle = theme.primary;
+  ctx.fillRect(0, height - 16, width, 16);
+
+  // Outer Border Stroke
+  ctx.restore(); // restore clip
   ctx.strokeStyle = theme.borderTint;
   ctx.lineWidth = 2.5;
-  createPortraitTicketPath(ctx, width, height, cornerR, notchY, notchR);
+  roundRect(ctx, 0, 0, width, height, cornerR);
   ctx.stroke();
 
   return canvas.toDataURL("image/png");
-}
-
-/**
- * Draws vertical decorative accent rules with two diamonds on either side of the QR code.
- */
-function drawVerticalAccentRule(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  h: number,
-  color: string
-) {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.4;
-
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x, y + h);
-  ctx.stroke();
-
-  // Two diamonds at 1/3 and 2/3
-  const d1 = y + h * 0.38;
-  const d2 = y + h * 0.62;
-  drawDiamond(ctx, x, d1, 4.5);
-  drawDiamond(ctx, x, d2, 4.5);
-  ctx.restore();
-}
-
-function drawDiamond(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  r: number
-) {
-  ctx.beginPath();
-  ctx.moveTo(x, y - r);
-  ctx.lineTo(x + r, y);
-  ctx.lineTo(x, y + r);
-  ctx.lineTo(x - r, y);
-  ctx.closePath();
-  ctx.fill();
 }
 
 function drawCalendarIcon(
@@ -652,23 +583,23 @@ function drawCalendarIcon(
 ) {
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.2;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  roundRect(ctx, x, y + 2, 24, 22, 5);
+  roundRect(ctx, x, y + 2, 26, 24, 6);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(x, y + 9);
-  ctx.lineTo(x + 24, y + 9);
+  ctx.moveTo(x, y + 10);
+  ctx.lineTo(x + 26, y + 10);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(x + 6, y);
-  ctx.lineTo(x + 6, y + 4);
-  ctx.moveTo(x + 18, y);
-  ctx.lineTo(x + 18, y + 4);
+  ctx.moveTo(x + 7, y);
+  ctx.lineTo(x + 7, y + 4);
+  ctx.moveTo(x + 19, y);
+  ctx.lineTo(x + 19, y + 4);
   ctx.stroke();
   ctx.restore();
 }
@@ -681,17 +612,17 @@ function drawLocationIcon(
 ) {
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.2;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
   ctx.beginPath();
-  ctx.arc(x + 10, y + 9, 7, 0, Math.PI * 2);
+  ctx.arc(x + 11, y + 10, 8, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(x + 10, y + 16);
-  ctx.lineTo(x + 10, y + 24);
+  ctx.moveTo(x + 11, y + 18);
+  ctx.lineTo(x + 11, y + 26);
   ctx.stroke();
   ctx.restore();
 }
@@ -719,11 +650,11 @@ export async function generateTicketPdf(
   });
 
   // Calculate proportional dimensions to fit centered on A4 page
-  // A4: 210 x 297mm. Pass ratio: 720 / 1100 = ~0.6545
-  const passWidthMm = 150;
-  const passHeightMm = (150 / 720) * 1100; // ~229mm
-  const xOffset = (210 - passWidthMm) / 2;
-  const yOffset = (297 - passHeightMm) / 2;
+  // A4: 210 x 297mm. Pass ratio: 720 / 1320 = ~0.545
+  const passWidthMm = 140;
+  const passHeightMm = (140 / 720) * 1320; // ~256.6mm
+  const xOffset = (210 - passWidthMm) / 2; // 35mm
+  const yOffset = (297 - passHeightMm) / 2; // ~20.2mm
 
   doc.addImage(passDataUrl, "PNG", xOffset, yOffset, passWidthMm, passHeightMm, undefined, "FAST");
 

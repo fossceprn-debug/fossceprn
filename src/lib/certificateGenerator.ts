@@ -520,25 +520,25 @@ function drawPdfCorners(doc: jsPDF) {
 // ============================================================================
 
 async function drawPdfHeader(doc: jsPDF) {
-  const centerX = 130;
+  const centerX = 148.5;
 
-  // Logos side by side.
+  // Logos side by side - centered on page.
   await addPdfImage(
     doc,
     crestLogoBase64,
-    91,
+    111,
     15,
-    25,
-    20
+    26,
+    21
   );
 
   await addPdfImage(
     doc,
     fossClubLogoBase64,
-    126,
+    146,
     15,
-    38,
-    20
+    40,
+    21
   );
 
   // Club name.
@@ -550,7 +550,7 @@ async function drawPdfHeader(doc: jsPDF) {
   doc.text(
     "FREE AND OPEN SOURCE SOFTWARE CLUB",
     centerX,
-    38,
+    40,
     { align: "center" }
   );
 
@@ -563,7 +563,7 @@ async function drawPdfHeader(doc: jsPDF) {
   doc.text(
     "FOSS CEPRN   |   COLLEGE OF ENGINEERING PERUMON",
     centerX,
-    43,
+    45,
     { align: "center" }
   );
 
@@ -572,17 +572,17 @@ async function drawPdfHeader(doc: jsPDF) {
   doc.setLineWidth(0.4);
 
   doc.line(
-    67,
-    47,
-    193,
-    47
+    75,
+    49,
+    222,
+    49
   );
 
   doc.setFillColor(0, 150, 94);
 
   doc.circle(
     centerX,
-    47,
+    49,
     0.9,
     "F"
   );
@@ -598,7 +598,7 @@ function drawPdfMainContent(
   eventTitle: string,
   formattedDate: string
 ) {
-  const centerX = 130;
+  const centerX = 148.5;
 
   // Certificate title.
   doc.setFont("helvetica", "bold");
@@ -632,7 +632,7 @@ function drawPdfMainContent(
   fitText(
     doc,
     attendeeName,
-    190,
+    175,
     25,
     14
   );
@@ -650,7 +650,7 @@ function drawPdfMainContent(
   const nameWidth = doc.getTextWidth(attendeeName);
 
   const lineWidth = Math.min(
-    180,
+    175,
     Math.max(90, nameWidth + 20)
   );
 
@@ -694,7 +694,7 @@ function drawPdfMainContent(
 
   const eventLines = doc.splitTextToSize(
     eventTitle,
-    185
+    175
   );
 
   if (eventLines.length > 2) {
@@ -724,7 +724,7 @@ function drawPdfMainContent(
 
   const dateLines = doc.splitTextToSize(
     dateText,
-    185
+    175
   );
 
   const dateY = eventBottom + 4;
@@ -747,7 +747,7 @@ function drawPdfMainContent(
 
   const appreciationLines = doc.splitTextToSize(
     appreciation,
-    185
+    175
   );
 
   doc.text(
@@ -769,10 +769,10 @@ function drawPdfQr(
 ) {
   if (!qrDataUrl) return;
 
-  const x = 244;
-  const y = 75;
-  const w = 42;
-  const h = 59;
+  const x = 242;
+  const y = 74;
+  const w = 36;
+  const h = 56;
 
   // Card.
   doc.setFillColor(250, 253, 251);
@@ -793,10 +793,10 @@ function drawPdfQr(
   doc.setFillColor(0, 115, 75);
 
   doc.roundedRect(
-    x + 3,
-    y + 3,
-    w - 6,
-    5.5,
+    x + 2,
+    y + 2.5,
+    w - 4,
+    5.2,
     1,
     1,
     "F"
@@ -804,13 +804,13 @@ function drawPdfQr(
 
   doc.setFont("helvetica", "bold");
 
-  doc.setFontSize(5.6);
+  doc.setFontSize(5.2);
   doc.setTextColor(255, 255, 255);
 
   doc.text(
-    "CERTIFICATE VERIFICATION",
+    "VERIFY CERTIFICATE",
     x + w / 2,
-    y + 6.7,
+    y + 6.1,
     { align: "center" }
   );
 
@@ -819,10 +819,10 @@ function drawPdfQr(
     doc.addImage(
       qrDataUrl,
       "PNG",
-      x + 5,
-      y + 11,
-      32,
-      32
+      x + 4,
+      y + 9.5,
+      28,
+      28
     );
   } catch (error) {
     console.warn("QR embedding failed:", error);
@@ -834,9 +834,9 @@ function drawPdfQr(
   fitText(
     doc,
     certId,
-    w - 5,
-    5,
-    3.5
+    w - 4,
+    4.5,
+    3.2
   );
 
   doc.setTextColor(35, 35, 35);
@@ -844,20 +844,20 @@ function drawPdfQr(
   doc.text(
     certId,
     x + w / 2,
-    y + 46,
+    y + 43,
     { align: "center" }
   );
 
   // Verification label.
   doc.setFont("helvetica", "bold");
 
-  doc.setFontSize(5.4);
+  doc.setFontSize(4.8);
   doc.setTextColor(0, 115, 75);
 
   doc.text(
     "SCAN • VERIFY • AUTHENTIC",
     x + w / 2,
-    y + 52,
+    y + 49,
     { align: "center" }
   );
 }
@@ -870,7 +870,7 @@ async function drawPdfSignatures(
   doc: jsPDF,
   preparedSignatures: string[]
 ) {
-  const centers = [39, 112, 185, 258];
+  const centers = [42, 113, 184, 255];
 
   const imageY = 140;
   const imageH = 18;
@@ -1185,28 +1185,28 @@ function canvasWrap(
 async function drawCanvasHeader(
   ctx: CanvasRenderingContext2D
 ) {
-  const centerX = 130;
+  const centerX = 148.5;
 
   const crest = await loadImage(crestLogoBase64);
   const foss = await loadImage(fossClubLogoBase64);
 
-  // Logos.
+  // Logos - centered on page.
   drawCanvasImage(
     ctx,
     crest,
-    91,
+    111,
     15,
-    25,
-    20
+    26,
+    21
   );
 
   drawCanvasImage(
     ctx,
     foss,
-    126,
+    146,
     15,
-    38,
-    20
+    40,
+    21
   );
 
   // Club name.
@@ -1220,7 +1220,7 @@ async function drawCanvasHeader(
   ctx.fillText(
     "FREE AND OPEN SOURCE SOFTWARE CLUB",
     centerX,
-    38
+    40
   );
 
   // Organization.
@@ -1231,7 +1231,7 @@ async function drawCanvasHeader(
   ctx.fillText(
     "FOSS CEPRN  |  COLLEGE OF ENGINEERING PERUMON",
     centerX,
-    43
+    45
   );
 
   // Divider.
@@ -1240,8 +1240,8 @@ async function drawCanvasHeader(
 
   ctx.beginPath();
 
-  ctx.moveTo(67, 47);
-  ctx.lineTo(193, 47);
+  ctx.moveTo(75, 49);
+  ctx.lineTo(222, 49);
 
   ctx.stroke();
 
@@ -1251,7 +1251,7 @@ async function drawCanvasHeader(
 
   ctx.arc(
     centerX,
-    47,
+    49,
     0.9,
     0,
     Math.PI * 2
@@ -1270,7 +1270,7 @@ function drawCanvasMainContent(
   eventTitle: string,
   formattedDate: string
 ) {
-  const centerX = 130;
+  const centerX = 148.5;
 
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
@@ -1281,7 +1281,7 @@ function drawCanvasMainContent(
   canvasFitFont(
     ctx,
     "CERTIFICATE OF PARTICIPATION",
-    205,
+    185,
     8,
     5.5,
     "Georgia",
@@ -1311,7 +1311,7 @@ function drawCanvasMainContent(
   canvasFitFont(
     ctx,
     attendeeName,
-    190,
+    175,
     7.5,
     4.5,
     "Arial",
@@ -1328,7 +1328,7 @@ function drawCanvasMainContent(
   const nameWidth = ctx.measureText(attendeeName).width;
 
   const lineWidth = Math.min(
-    180,
+    175,
     Math.max(90, nameWidth + 20)
   );
 
@@ -1380,7 +1380,7 @@ function drawCanvasMainContent(
   canvasFitFont(
     ctx,
     eventTitle,
-    185,
+    175,
     4.4,
     3,
     "Arial",
@@ -1390,7 +1390,7 @@ function drawCanvasMainContent(
   const eventLines = canvasWrap(
     ctx,
     eventTitle,
-    185
+    175
   );
 
   const eventY = 98;
@@ -1415,7 +1415,7 @@ function drawCanvasMainContent(
   const dateLines = canvasWrap(
     ctx,
     description,
-    185
+    175
   );
 
   const dateY =
@@ -1440,7 +1440,7 @@ function drawCanvasMainContent(
   const appreciationLines = canvasWrap(
     ctx,
     appreciation,
-    185
+    175
   );
 
   const appreciationY =
@@ -1469,10 +1469,10 @@ async function drawCanvasQr(
   try {
     const qr = await loadImage(qrDataUrl);
 
-    const x = 244;
-    const y = 75;
-    const w = 42;
-    const h = 59;
+    const x = 242;
+    const y = 74;
+    const w = 36;
+    const h = 56;
 
     // Card.
     ctx.fillStyle = "#fbfdfc";
@@ -1498,10 +1498,10 @@ async function drawCanvasQr(
     ctx.beginPath();
 
     ctx.roundRect(
-      x + 3,
-      y + 3,
-      w - 6,
-      5.5,
+      x + 2,
+      y + 2.5,
+      w - 4,
+      5.2,
       1
     );
 
@@ -1511,21 +1511,21 @@ async function drawCanvasQr(
     ctx.textBaseline = "alphabetic";
 
     ctx.fillStyle = WHITE;
-    ctx.font = "bold 1.8px Arial";
+    ctx.font = "bold 1.7px Arial";
 
     ctx.fillText(
-      "CERTIFICATE VERIFICATION",
+      "VERIFY CERTIFICATE",
       x + w / 2,
-      y + 6.7
+      y + 6.1
     );
 
     // QR.
     ctx.drawImage(
       qr,
-      x + 5,
-      y + 11,
-      32,
-      32
+      x + 4,
+      y + 9.5,
+      28,
+      28
     );
 
     // Certificate ID.
@@ -1534,8 +1534,8 @@ async function drawCanvasQr(
     canvasFitFont(
       ctx,
       certId,
-      w - 5,
-      1.65,
+      w - 4,
+      1.55,
       1.1,
       "monospace",
       "bold"
@@ -1544,17 +1544,17 @@ async function drawCanvasQr(
     ctx.fillText(
       certId,
       x + w / 2,
-      y + 46
+      y + 43
     );
 
     // Footer.
     ctx.fillStyle = GREEN;
-    ctx.font = "bold 1.65px Arial";
+    ctx.font = "bold 1.55px Arial";
 
     ctx.fillText(
       "SCAN • VERIFY • AUTHENTIC",
       x + w / 2,
-      y + 52
+      y + 49
     );
   } catch (error) {
     console.warn("PNG QR rendering failed:", error);
@@ -1569,7 +1569,7 @@ async function drawCanvasSignatures(
   ctx: CanvasRenderingContext2D,
   preparedSignatures: string[]
 ) {
-  const centers = [39, 112, 185, 258];
+  const centers = [42, 113, 184, 255];
 
   const imageY = 140;
   const imageH = 18;
