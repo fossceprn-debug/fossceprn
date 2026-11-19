@@ -3,13 +3,15 @@
 // A4 LANDSCAPE | PROFESSIONAL DESIGN | PDF + PNG
 //
 // DESIGN:
-// - Reference-inspired modern certificate
+// - Professional modern certificate
 // - College crest + FOSS CEPRN logo
-// - Large certificate title and participant name
-// - QR verification card on the right
-// - Four signatures in an evenly spaced bottom row
-// - Decorative corner designs
-// - Matching PDF and PNG layout
+// - Improved title and participant spacing
+// - Larger event and appreciation text
+// - Subtle watermark background
+// - QR verification card
+// - Four evenly balanced signatures
+// - Abiya Daniel positioned as Event Lead (fourth)
+// - Matching PDF + PNG
 // - Selectable PDF text
 // - Google Drive sync
 // ============================================================================
@@ -51,7 +53,6 @@ export interface GeneratedCertificate {
 
 const PAGE_W = 297;
 const PAGE_H = 210;
-
 const SCALE = 10;
 
 const GREEN = "#00965e";
@@ -64,15 +65,10 @@ const LIGHT_GRAY = "#d1d5db";
 const WHITE = "#ffffff";
 
 // ============================================================================
-// SIGNATURES
+// SIGNATURES — ORDER
 // ============================================================================
 
 const SIGNATURES = [
-  {
-    src: sigCommunityLeadBase64,
-    name: "Abiya Daniel",
-    role: "Event Lead, FOSS CEPRN",
-  },
   {
     src: sigFaculty1Base64,
     name: "Ms. ANJU VENUGOPAL",
@@ -87,6 +83,11 @@ const SIGNATURES = [
     src: sigPrincipalBase64,
     name: "Dr BEJOY ABRAHAM",
     role: "PRINCIPAL",
+  },
+  {
+    src: sigCommunityLeadBase64,
+    name: "Abiya Daniel",
+    role: "EVENT LEAD, FOSS CEPRN",
   },
 ];
 
@@ -124,7 +125,6 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Unable to load image"));
-
     img.src = src;
   });
 }
@@ -175,7 +175,8 @@ async function addPdfImage(
     const finalY = y + (height - size.height) / 2;
 
     const format =
-      src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg")
+      src.startsWith("data:image/jpeg") ||
+        src.startsWith("data:image/jpg")
         ? "JPEG"
         : "PNG";
 
@@ -270,7 +271,6 @@ async function prepareSignature(src: string): Promise<string> {
           continue;
         }
 
-        // Preserve anti-aliased ink edges.
         const opacity = Math.max(
           0,
           Math.min(1, (245 - brightness) / 180)
@@ -280,7 +280,7 @@ async function prepareSignature(src: string): Promise<string> {
           data[i + 3] * opacity
         );
 
-        // Improve signature contrast.
+        // Signature ink color.
         data[i] = 22;
         data[i + 1] = 35;
         data[i + 2] = 48;
@@ -393,11 +393,62 @@ function drawWrappedPdfText(
 }
 
 // ============================================================================
+// PDF WATERMARK / BACKGROUND DESIGN
+// ============================================================================
+
+function drawPdfBackgroundDesign(doc: jsPDF) {
+  // Very subtle central watermark circles.
+  doc.setDrawColor(235, 244, 239);
+  doc.setLineWidth(0.45);
+
+  doc.circle(148.5, 105, 48);
+  doc.circle(148.5, 105, 40);
+  doc.circle(148.5, 105, 32);
+
+  // Subtle diagonal decorative lines.
+  doc.setDrawColor(242, 247, 244);
+  doc.setLineWidth(0.25);
+
+  for (let i = 0; i < 6; i++) {
+    const offset = i * 5;
+
+    doc.line(
+      17 + offset,
+      17,
+      37 + offset,
+      37
+    );
+
+    doc.line(
+      PAGE_W - 17 - offset,
+      17,
+      PAGE_W - 37 - offset,
+      37
+    );
+  }
+
+  // Tiny watermark dots.
+  doc.setFillColor(235, 244, 239);
+
+  const dots = [
+    [24, 105],
+    [29, 105],
+    [34, 105],
+    [263, 105],
+    [268, 105],
+    [273, 105],
+  ];
+
+  dots.forEach(([x, y]) => {
+    doc.circle(x, y, 0.65, "F");
+  });
+}
+
+// ============================================================================
 // PDF BORDER
 // ============================================================================
 
 function drawPdfFrame(doc: jsPDF) {
-  // White background.
   doc.setFillColor(255, 255, 255);
 
   doc.rect(
@@ -407,6 +458,9 @@ function drawPdfFrame(doc: jsPDF) {
     PAGE_H,
     "F"
   );
+
+  // Background watermark.
+  drawPdfBackgroundDesign(doc);
 
   // Outer frame.
   doc.setDrawColor(35, 35, 35);
@@ -430,7 +484,6 @@ function drawPdfFrame(doc: jsPDF) {
     PAGE_H - 28
   );
 
-  // Corner accents.
   drawPdfCorners(doc);
 }
 
@@ -439,23 +492,11 @@ function drawPdfCorners(doc: jsPDF) {
   const margin = 14;
 
   doc.setLineWidth(1.4);
-
   doc.setDrawColor(0, 150, 94);
 
   // Top left.
-  doc.line(
-    margin,
-    margin,
-    margin + length,
-    margin
-  );
-
-  doc.line(
-    margin,
-    margin,
-    margin,
-    margin + length
-  );
+  doc.line(margin, margin, margin + length, margin);
+  doc.line(margin, margin, margin, margin + length);
 
   // Top right.
   doc.line(
@@ -505,19 +546,8 @@ function drawPdfCorners(doc: jsPDF) {
   // Center ornaments.
   doc.setFillColor(0, 150, 94);
 
-  doc.circle(
-    PAGE_W / 2,
-    14,
-    1.1,
-    "F"
-  );
-
-  doc.circle(
-    PAGE_W / 2,
-    PAGE_H - 14,
-    1.1,
-    "F"
-  );
+  doc.circle(PAGE_W / 2, 14, 1.1, "F");
+  doc.circle(PAGE_W / 2, PAGE_H - 14, 1.1, "F");
 }
 
 // ============================================================================
@@ -527,7 +557,6 @@ function drawPdfCorners(doc: jsPDF) {
 async function drawPdfHeader(doc: jsPDF) {
   const centerX = 148.5;
 
-  // Logos side by side - centered on page.
   await addPdfImage(
     doc,
     crestLogoBase64,
@@ -548,7 +577,6 @@ async function drawPdfHeader(doc: jsPDF) {
 
   // Club name.
   doc.setFont("helvetica", "bold");
-
   doc.setFontSize(11.5);
   doc.setTextColor(0, 80, 54);
 
@@ -561,7 +589,6 @@ async function drawPdfHeader(doc: jsPDF) {
 
   // Organization.
   doc.setFont("helvetica", "normal");
-
   doc.setFontSize(7.7);
   doc.setTextColor(45, 45, 45);
 
@@ -576,25 +603,14 @@ async function drawPdfHeader(doc: jsPDF) {
   doc.setDrawColor(0, 150, 94);
   doc.setLineWidth(0.4);
 
-  doc.line(
-    75,
-    49,
-    222,
-    49
-  );
+  doc.line(75, 49, 222, 49);
 
   doc.setFillColor(0, 150, 94);
-
-  doc.circle(
-    centerX,
-    49,
-    0.9,
-    "F"
-  );
+  doc.circle(centerX, 49, 0.9, "F");
 }
 
 // ============================================================================
-// PDF CERTIFICATE CONTENT
+// PDF CERTIFICATE CONTENT — UPDATED SPACING
 // ============================================================================
 
 function drawPdfMainContent(
@@ -607,27 +623,25 @@ function drawPdfMainContent(
 
   // Certificate title.
   doc.setFont("helvetica", "bold");
-
   doc.setFontSize(21);
   doc.setTextColor(0, 115, 75);
 
   doc.text(
     "CERTIFICATE OF PARTICIPATION",
     centerX,
-    57,
+    59,
     { align: "center" }
   );
 
-  // Subtitle.
+  // Subtitle — more breathing room.
   doc.setFont("times", "italic");
-
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(100, 116, 139);
 
   doc.text(
     "This certificate is proudly awarded to",
     centerX,
-    66,
+    72,
     { align: "center" }
   );
 
@@ -647,11 +661,11 @@ function drawPdfMainContent(
   doc.text(
     attendeeName,
     centerX,
-    78,
+    85,
     { align: "center" }
   );
 
-  // Name underline.
+  // Underline.
   const nameWidth = doc.getTextWidth(attendeeName);
 
   const lineWidth = Math.min(
@@ -664,37 +678,28 @@ function drawPdfMainContent(
 
   doc.line(
     centerX - lineWidth / 2,
-    82,
+    89,
     centerX + lineWidth / 2,
-    82
+    89
   );
 
   doc.setFillColor(0, 150, 94);
+  doc.circle(centerX, 89, 0.85, "F");
 
-  doc.circle(
-    centerX,
-    82,
-    0.85,
-    "F"
-  );
-
-  // Participation text.
+  // Participation text — larger.
   doc.setFont("helvetica", "normal");
-
-  doc.setFontSize(9.2);
+  doc.setFontSize(11.5);
   doc.setTextColor(50, 50, 50);
 
   doc.text(
     "in recognition of their active participation in",
     centerX,
-    90,
+    98,
     { align: "center" }
   );
 
-  // Event title.
+  // Event title — larger.
   doc.setFont("helvetica", "bold");
-
-  doc.setFontSize(12.5);
   doc.setTextColor(0, 130, 80);
 
   const eventLines = doc.splitTextToSize(
@@ -702,27 +707,35 @@ function drawPdfMainContent(
     175
   );
 
+  let eventFontSize = 14;
+
   if (eventLines.length > 2) {
-    doc.setFontSize(10.5);
-  } else if (eventTitle.length > 40) {
-    doc.setFontSize(11.5);
+    eventFontSize = 11.5;
+  } else if (eventTitle.length > 45) {
+    eventFontSize = 12.5;
+  } else if (eventTitle.length > 32) {
+    eventFontSize = 13;
   }
+
+  doc.setFontSize(eventFontSize);
+
+  const eventY = 106;
+  const eventLineHeight = eventFontSize * 0.38;
 
   doc.text(
     eventLines,
     centerX,
-    98,
+    eventY,
     { align: "center" }
   );
 
   const eventBottom =
-    98 + eventLines.length * 4.8;
+    eventY + eventLines.length * eventLineHeight;
 
-  // Date.
+  // Date/organization sentence — larger.
   doc.setFont("helvetica", "normal");
-
-  doc.setFontSize(8);
-  doc.setTextColor(70, 70, 70);
+  doc.setFontSize(9.8);
+  doc.setTextColor(65, 65, 65);
 
   const dateText =
     `Organized by FOSS CEPRN, College of Engineering Perumon, conducted on ${formattedDate}.`;
@@ -732,7 +745,8 @@ function drawPdfMainContent(
     175
   );
 
-  const dateY = eventBottom + 4;
+  const dateY = eventBottom + 4.5;
+  const dateLineHeight = 4.3;
 
   doc.text(
     dateLines,
@@ -741,11 +755,10 @@ function drawPdfMainContent(
     { align: "center" }
   );
 
-  // Appreciation text.
+  // Appreciation.
   doc.setFont("times", "italic");
-
-  doc.setFontSize(7.8);
-  doc.setTextColor(120, 120, 120);
+  doc.setFontSize(9.2);
+  doc.setTextColor(110, 110, 110);
 
   const appreciation =
     "With appreciation for their enthusiasm, learning, and contribution to the open-source community.";
@@ -755,10 +768,13 @@ function drawPdfMainContent(
     175
   );
 
+  const appreciationY =
+    dateY + dateLines.length * dateLineHeight + 3;
+
   doc.text(
     appreciationLines,
     centerX,
-    dateY + dateLines.length * 4 + 2,
+    appreciationY,
     { align: "center" }
   );
 }
@@ -784,17 +800,9 @@ function drawPdfQr(
   doc.setDrawColor(0, 150, 94);
   doc.setLineWidth(0.55);
 
-  doc.roundedRect(
-    x,
-    y,
-    w,
-    h,
-    2,
-    2,
-    "FD"
-  );
+  doc.roundedRect(x, y, w, h, 2, 2, "FD");
 
-  // Card heading.
+  // Heading.
   doc.setFillColor(0, 115, 75);
 
   doc.roundedRect(
@@ -808,7 +816,6 @@ function drawPdfQr(
   );
 
   doc.setFont("helvetica", "bold");
-
   doc.setFontSize(5.2);
   doc.setTextColor(255, 255, 255);
 
@@ -819,7 +826,7 @@ function drawPdfQr(
     { align: "center" }
   );
 
-  // QR image.
+  // QR.
   try {
     doc.addImage(
       qrDataUrl,
@@ -855,7 +862,6 @@ function drawPdfQr(
 
   // Verification label.
   doc.setFont("helvetica", "bold");
-
   doc.setFontSize(4.8);
   doc.setTextColor(0, 115, 75);
 
@@ -875,18 +881,18 @@ async function drawPdfSignatures(
   doc: jsPDF,
   preparedSignatures: string[]
 ) {
+  // Equal spacing.
   const centers = [42, 113, 184, 255];
 
   const imageY = 140;
   const imageH = 18;
-
   const lineY = 162;
 
   for (let i = 0; i < SIGNATURES.length; i++) {
     const signature = SIGNATURES[i];
     const center = centers[i];
 
-    // Signature.
+    // Signature image.
     await addPdfImage(
       doc,
       preparedSignatures[i] || signature.src,
@@ -896,7 +902,7 @@ async function drawPdfSignatures(
       imageH
     );
 
-    // Signature baseline.
+    // Signature line.
     doc.setDrawColor(110, 120, 130);
     doc.setLineWidth(0.35);
 
@@ -909,7 +915,6 @@ async function drawPdfSignatures(
 
     // Name.
     doc.setFont("helvetica", "bold");
-
     doc.setFontSize(7.1);
     doc.setTextColor(20, 20, 20);
 
@@ -928,9 +933,8 @@ async function drawPdfSignatures(
       { align: "center" }
     );
 
-    // Designation.
+    // Role.
     doc.setFont("helvetica", "normal");
-
     doc.setFontSize(6.2);
     doc.setTextColor(70, 70, 70);
 
@@ -954,16 +958,10 @@ async function drawPdfSignatures(
   doc.setDrawColor(0, 150, 94);
   doc.setLineWidth(0.3);
 
-  doc.line(
-    18,
-    179,
-    279,
-    179
-  );
+  doc.line(18, 179, 279, 179);
 
-  // Footer text.
+  // Footer.
   doc.setFont("times", "italic");
-
   doc.setFontSize(6.3);
   doc.setTextColor(120, 120, 120);
 
@@ -976,21 +974,78 @@ async function drawPdfSignatures(
 }
 
 // ============================================================================
+// CANVAS WATERMARK
+// ============================================================================
+
+function drawCanvasBackgroundDesign(
+  ctx: CanvasRenderingContext2D
+) {
+  // Soft circular watermark.
+  ctx.strokeStyle = "#edf5f0";
+  ctx.lineWidth = 0.45;
+
+  [48, 40, 32].forEach((radius) => {
+    ctx.beginPath();
+
+    ctx.arc(
+      PAGE_W / 2,
+      PAGE_H / 2,
+      radius,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.stroke();
+  });
+
+  // Subtle diagonal lines.
+  ctx.strokeStyle = "#f3f7f4";
+  ctx.lineWidth = 0.25;
+
+  for (let i = 0; i < 6; i++) {
+    const offset = i * 5;
+
+    ctx.beginPath();
+    ctx.moveTo(17 + offset, 17);
+    ctx.lineTo(37 + offset, 37);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(PAGE_W - 17 - offset, 17);
+    ctx.lineTo(PAGE_W - 37 - offset, 37);
+    ctx.stroke();
+  }
+
+  // Small watermark dots.
+  ctx.fillStyle = "#ebf4ef";
+
+  [
+    [24, 105],
+    [29, 105],
+    [34, 105],
+    [263, 105],
+    [268, 105],
+    [273, 105],
+  ].forEach(([x, y]) => {
+    ctx.beginPath();
+    ctx.arc(x, y, 0.65, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ============================================================================
 // CANVAS DECORATION
 // ============================================================================
 
 function drawCanvasFrame(
   ctx: CanvasRenderingContext2D
 ) {
-  // Background.
+  // White background.
   ctx.fillStyle = WHITE;
+  ctx.fillRect(0, 0, PAGE_W, PAGE_H);
 
-  ctx.fillRect(
-    0,
-    0,
-    PAGE_W,
-    PAGE_H
-  );
+  // Watermark.
+  drawCanvasBackgroundDesign(ctx);
 
   // Outer border.
   ctx.strokeStyle = "#333333";
@@ -1014,48 +1069,41 @@ function drawCanvasFrame(
     PAGE_H - 28
   );
 
-  // Corner designs.
   drawCanvasCorners(ctx);
 }
 
 function drawCanvasCorners(
   ctx: CanvasRenderingContext2D
 ) {
-  // Top-left black/gray abstract blocks.
+  // Top-left black accent.
   ctx.fillStyle = "#111111";
 
   ctx.beginPath();
-
   ctx.moveTo(0, 0);
   ctx.lineTo(31, 0);
   ctx.lineTo(26, 22);
   ctx.lineTo(0, 18);
-
   ctx.closePath();
   ctx.fill();
 
   ctx.fillStyle = "#666666";
 
   ctx.beginPath();
-
   ctx.moveTo(0, 18);
   ctx.lineTo(22, 23);
   ctx.lineTo(16, 43);
   ctx.lineTo(0, 40);
-
   ctx.closePath();
   ctx.fill();
 
-  // Top-right green shapes.
+  // Top-right green accent.
   ctx.fillStyle = "#10b364";
 
   ctx.beginPath();
-
   ctx.moveTo(270, 0);
   ctx.lineTo(297, 0);
   ctx.lineTo(297, 18);
   ctx.lineTo(279, 26);
-
   ctx.closePath();
   ctx.fill();
 
@@ -1063,22 +1111,18 @@ function drawCanvasCorners(
   ctx.lineWidth = 1.1;
 
   ctx.beginPath();
-
   ctx.moveTo(268, 8);
   ctx.lineTo(281, 35);
   ctx.lineTo(297, 29);
-
   ctx.stroke();
 
   ctx.beginPath();
-
   ctx.moveTo(265, 14);
   ctx.lineTo(278, 37);
   ctx.lineTo(297, 32);
-
   ctx.stroke();
 
-  // Bottom-left green accent.
+  // Bottom-left accent.
   ctx.strokeStyle = "#10b364";
   ctx.lineWidth = 1.1;
 
@@ -1086,15 +1130,13 @@ function drawCanvasCorners(
     const offset = i * 4;
 
     ctx.beginPath();
-
     ctx.moveTo(0, 197 - offset);
     ctx.lineTo(26 - offset, 197 - offset);
     ctx.lineTo(22 - offset, 210 - offset);
-
     ctx.stroke();
   }
 
-  // Bottom-right dotted pattern.
+  // Bottom-right dots.
   ctx.fillStyle = "#dddddd";
 
   for (let row = 0; row < 6; row++) {
@@ -1105,20 +1147,11 @@ function drawCanvasCorners(
       if (x > PAGE_W || y > PAGE_H) continue;
 
       ctx.beginPath();
-
-      ctx.arc(
-        x,
-        y,
-        1.35,
-        0,
-        Math.PI * 2
-      );
-
+      ctx.arc(x, y, 1.35, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  // Dark green dots in the pattern.
   ctx.fillStyle = "#333333";
 
   ctx.beginPath();
@@ -1203,31 +1236,14 @@ async function drawCanvasHeader(
   const crest = await loadImage(crestLogoBase64);
   const foss = await loadImage(fossClubLogoBase64);
 
-  // Logos - centered on page.
-  drawCanvasImage(
-    ctx,
-    crest,
-    111,
-    15,
-    26,
-    21
-  );
-
-  drawCanvasImage(
-    ctx,
-    foss,
-    146,
-    15,
-    40,
-    21
-  );
+  // Logos.
+  drawCanvasImage(ctx, crest, 111, 15, 26, 21);
+  drawCanvasImage(ctx, foss, 146, 15, 40, 21);
 
   // Club name.
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-
   ctx.fillStyle = "#005036";
-
   ctx.font = "bold 3.8px Arial";
 
   ctx.fillText(
@@ -1238,7 +1254,6 @@ async function drawCanvasHeader(
 
   // Organization.
   ctx.fillStyle = "#333333";
-
   ctx.font = "3px Arial";
 
   ctx.fillText(
@@ -1252,29 +1267,19 @@ async function drawCanvasHeader(
   ctx.lineWidth = 0.4;
 
   ctx.beginPath();
-
   ctx.moveTo(75, 49);
   ctx.lineTo(222, 49);
-
   ctx.stroke();
 
   ctx.fillStyle = GREEN;
 
   ctx.beginPath();
-
-  ctx.arc(
-    centerX,
-    49,
-    0.9,
-    0,
-    Math.PI * 2
-  );
-
+  ctx.arc(centerX, 49, 0.9, 0, Math.PI * 2);
   ctx.fill();
 }
 
 // ============================================================================
-// CANVAS MAIN CONTENT
+// CANVAS MAIN CONTENT — MATCHES PDF
 // ============================================================================
 
 function drawCanvasMainContent(
@@ -1288,7 +1293,7 @@ function drawCanvasMainContent(
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
 
-  // Title.
+  // Certificate title.
   ctx.fillStyle = "#00734b";
 
   canvasFitFont(
@@ -1297,28 +1302,27 @@ function drawCanvasMainContent(
     185,
     8,
     5.5,
-    "Georgia",
+    "Arial",
     "bold"
   );
 
   ctx.fillText(
     "CERTIFICATE OF PARTICIPATION",
     centerX,
-    57
+    59
   );
 
   // Subtitle.
   ctx.fillStyle = "#777777";
-
-  ctx.font = "italic 3.4px Georgia";
+  ctx.font = "italic 3.7px Georgia";
 
   ctx.fillText(
     "This certificate is proudly awarded to",
     centerX,
-    66
+    72
   );
 
-  // Name.
+  // Participant name.
   ctx.fillStyle = "#111111";
 
   canvasFitFont(
@@ -1334,10 +1338,10 @@ function drawCanvasMainContent(
   ctx.fillText(
     attendeeName,
     centerX,
-    78
+    85
   );
 
-  // Name underline.
+  // Underline.
   const nameWidth = ctx.measureText(attendeeName).width;
 
   const lineWidth = Math.min(
@@ -1349,56 +1353,28 @@ function drawCanvasMainContent(
   ctx.lineWidth = 0.65;
 
   ctx.beginPath();
-
-  ctx.moveTo(
-    centerX - lineWidth / 2,
-    82
-  );
-
-  ctx.lineTo(
-    centerX + lineWidth / 2,
-    82
-  );
-
+  ctx.moveTo(centerX - lineWidth / 2, 89);
+  ctx.lineTo(centerX + lineWidth / 2, 89);
   ctx.stroke();
 
   ctx.fillStyle = GREEN;
 
   ctx.beginPath();
-
-  ctx.arc(
-    centerX,
-    82,
-    0.85,
-    0,
-    Math.PI * 2
-  );
-
+  ctx.arc(centerX, 89, 0.85, 0, Math.PI * 2);
   ctx.fill();
 
   // Participation sentence.
   ctx.fillStyle = "#333333";
-
-  ctx.font = "3.3px Arial";
+  ctx.font = "3.8px Arial";
 
   ctx.fillText(
     "in recognition of their active participation in",
     centerX,
-    90
+    98
   );
 
   // Event title.
   ctx.fillStyle = "#008250";
-
-  canvasFitFont(
-    ctx,
-    eventTitle,
-    175,
-    4.4,
-    3,
-    "Arial",
-    "bold"
-  );
 
   const eventLines = canvasWrap(
     ctx,
@@ -1406,7 +1382,19 @@ function drawCanvasMainContent(
     175
   );
 
-  const eventY = 98;
+  let eventFontSize = 4.8;
+
+  if (eventLines.length > 2) {
+    eventFontSize = 4;
+  } else if (eventTitle.length > 45) {
+    eventFontSize = 4.3;
+  } else if (eventTitle.length > 32) {
+    eventFontSize = 4.5;
+  }
+
+  ctx.font = `bold ${eventFontSize}px Arial`;
+
+  const eventY = 106;
   const eventLineHeight = 5;
 
   eventLines.forEach((line, index) => {
@@ -1417,10 +1405,12 @@ function drawCanvasMainContent(
     );
   });
 
-  // Event date.
-  ctx.fillStyle = "#4b5563";
+  const eventBottom =
+    eventY + eventLines.length * eventLineHeight;
 
-  ctx.font = "2.7px Arial";
+  // Date and organization.
+  ctx.fillStyle = "#4b5563";
+  ctx.font = "3.4px Arial";
 
   const description =
     `Organized by FOSS CEPRN, College of Engineering Perumon, conducted on ${formattedDate}.`;
@@ -1431,21 +1421,20 @@ function drawCanvasMainContent(
     175
   );
 
-  const dateY =
-    eventY + eventLines.length * eventLineHeight + 4;
+  const dateY = eventBottom + 4.5;
+  const dateLineHeight = 4.3;
 
   dateLines.forEach((line, index) => {
     ctx.fillText(
       line,
       centerX,
-      dateY + index * 3.5
+      dateY + index * dateLineHeight
     );
   });
 
   // Appreciation.
   ctx.fillStyle = "#888888";
-
-  ctx.font = "italic 2.7px Georgia";
+  ctx.font = "italic 3.2px Georgia";
 
   const appreciation =
     "With appreciation for their enthusiasm, learning, and contribution to the open-source community.";
@@ -1457,13 +1446,13 @@ function drawCanvasMainContent(
   );
 
   const appreciationY =
-    dateY + dateLines.length * 3.5 + 2;
+    dateY + dateLines.length * dateLineHeight + 3;
 
   appreciationLines.forEach((line, index) => {
     ctx.fillText(
       line,
       centerX,
-      appreciationY + index * 3.5
+      appreciationY + index * 3.8
     );
   });
 }
@@ -1493,15 +1482,7 @@ async function drawCanvasQr(
     ctx.lineWidth = 0.55;
 
     ctx.beginPath();
-
-    ctx.roundRect(
-      x,
-      y,
-      w,
-      h,
-      2
-    );
-
+    ctx.roundRect(x, y, w, h, 2);
     ctx.fill();
     ctx.stroke();
 
@@ -1509,20 +1490,11 @@ async function drawCanvasQr(
     ctx.fillStyle = DARK_GREEN;
 
     ctx.beginPath();
-
-    ctx.roundRect(
-      x + 2,
-      y + 2.5,
-      w - 4,
-      5.2,
-      1
-    );
-
+    ctx.roundRect(x + 2, y + 2.5, w - 4, 5.2, 1);
     ctx.fill();
 
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-
     ctx.fillStyle = WHITE;
     ctx.font = "bold 1.7px Arial";
 
@@ -1560,7 +1532,7 @@ async function drawCanvasQr(
       y + 43
     );
 
-    // Footer.
+    // Verification footer.
     ctx.fillStyle = GREEN;
     ctx.font = "bold 1.55px Arial";
 
@@ -1586,7 +1558,6 @@ async function drawCanvasSignatures(
 
   const imageY = 140;
   const imageH = 18;
-
   const lineY = 162;
 
   for (let i = 0; i < SIGNATURES.length; i++) {
@@ -1619,17 +1590,8 @@ async function drawCanvasSignatures(
     ctx.lineWidth = 0.35;
 
     ctx.beginPath();
-
-    ctx.moveTo(
-      center - 23,
-      lineY
-    );
-
-    ctx.lineTo(
-      center + 23,
-      lineY
-    );
-
+    ctx.moveTo(center - 23, lineY);
+    ctx.lineTo(center + 23, lineY);
     ctx.stroke();
 
     // Name.
@@ -1651,7 +1613,7 @@ async function drawCanvasSignatures(
       167
     );
 
-    // Designation.
+    // Role.
     ctx.fillStyle = "#555555";
 
     canvasFitFont(
@@ -1676,17 +1638,13 @@ async function drawCanvasSignatures(
   ctx.lineWidth = 0.3;
 
   ctx.beginPath();
-
   ctx.moveTo(18, 179);
   ctx.lineTo(279, 179);
-
   ctx.stroke();
 
   // Footer.
   ctx.fillStyle = "#888888";
-
   ctx.font = "italic 2.1px Georgia";
-
   ctx.textAlign = "center";
 
   ctx.fillText(
@@ -1728,16 +1686,15 @@ async function generateCertificatePng(params: {
     throw new Error("Canvas is not available");
   }
 
-  // Scale canvas into mm-based layout coordinates.
   ctx.scale(SCALE, SCALE);
 
-  // Frame.
+  // Frame and background.
   drawCanvasFrame(ctx);
 
   // Header.
   await drawCanvasHeader(ctx);
 
-  // Main certificate content.
+  // Main content.
   drawCanvasMainContent(
     ctx,
     attendeeName,
@@ -1796,7 +1753,7 @@ export async function generateAttendeeCertificate(
   // Verification URL.
   const baseUrl =
     typeof window !== "undefined" &&
-    window.location.origin
+      window.location.origin
       ? window.location.origin
       : "https://fossceprn.org";
 
