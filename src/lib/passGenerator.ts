@@ -593,69 +593,88 @@ export async function generateInvitationPassImage(
   ctx.font = "800 11px system-ui, -apple-system, sans-serif";
   ctx.fillText("SCAN FOR ENTRY CHECK-IN", cx, codePillY + codePillH + 18);
 
-  // 11. Event Coordinator Pill Card
-  const coordCardY = codePillY + codePillH + 34;
-  const coordCardW = width - 140;
-  const coordCardH = 56;
-  const coordCardX = cx - coordCardW / 2;
+  // 11. Registered Attendee & Coordinator Details Box
+  const detailsBoxY = codePillY + codePillH + 30;
+  const detailsBoxW = width - 110;
+  const detailsBoxH = 68;
+  const detailsBoxX = cx - detailsBoxW / 2;
 
   ctx.save();
   ctx.fillStyle = "#ffffff";
   ctx.shadowColor = "rgba(0, 0, 0, 0.04)";
   ctx.shadowBlur = 6;
-  roundRect(ctx, coordCardX, coordCardY, coordCardW, coordCardH, 28);
+  roundRect(ctx, detailsBoxX, detailsBoxY, detailsBoxW, detailsBoxH, 16);
   ctx.fill();
   ctx.restore();
 
   ctx.strokeStyle = theme.borderTint;
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, coordCardX, coordCardY, coordCardW, coordCardH, 28);
+  ctx.lineWidth = 1.4;
+  roundRect(ctx, detailsBoxX, detailsBoxY, detailsBoxW, detailsBoxH, 16);
   ctx.stroke();
 
-  // Coordinator Avatar Circle Icon
-  const avatarX = coordCardX + 12;
-  const avatarY = coordCardY + 8;
-  const avatarR = 20;
-
-  ctx.fillStyle = theme.primary;
+  // Vertical divider in the details box
+  ctx.strokeStyle = theme.borderTint;
   ctx.beginPath();
-  ctx.arc(avatarX + avatarR, avatarY + avatarR, avatarR, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(cx, detailsBoxY + 8);
+  ctx.lineTo(cx, detailsBoxY + detailsBoxH - 8);
+  ctx.stroke();
 
-  // Silhouette user inside avatar
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(avatarX + avatarR, avatarY + 14, 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(avatarX + avatarR, avatarY + 30, 11, Math.PI, Math.PI * 2);
-  ctx.fill();
-
-  // Coordinator Details
-  const coordName =
-    options.coordinator1Name ||
-    options.coordinatorName ||
-    "Chapter Coordinator";
-  const coordPhone =
-    options.coordinator1Phone ||
-    options.coordinatorPhone ||
-    "+91 9895461970";
-
+  // Left Column: REGISTERED ATTENDEE
   ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = "#64748b";
-  ctx.font = "600 11px system-ui, -apple-system, sans-serif";
-  ctx.fillText("Event Coordinator", avatarX + avatarR * 2 + 14, coordCardY + 24);
+  ctx.fillStyle = theme.primary;
+  ctx.font = "800 10px system-ui, -apple-system, sans-serif";
+  ctx.fillText("REGISTERED ATTENDEE", detailsBoxX + 16, detailsBoxY + 20);
 
   ctx.fillStyle = "#0f172a";
   ctx.font = "bold 13px system-ui, -apple-system, sans-serif";
+  const attNameTrunc =
+    options.attendeeName.length > 20
+      ? options.attendeeName.substring(0, 18) + "..."
+      : options.attendeeName;
+  ctx.fillText(attNameTrunc, detailsBoxX + 16, detailsBoxY + 38);
+
+  ctx.fillStyle = "#64748b";
+  ctx.font = "600 11px system-ui, -apple-system, sans-serif";
+  const attSub = options.classSemester || options.attendeeEmail || "";
+  const attSubTrunc = attSub.length > 22 ? attSub.substring(0, 20) + "..." : attSub;
+  ctx.fillText(attSubTrunc, detailsBoxX + 16, detailsBoxY + 54);
+
+  // Right Column: EVENT COORDINATORS
+  ctx.fillStyle = theme.primary;
+  ctx.font = "800 10px system-ui, -apple-system, sans-serif";
+  ctx.fillText("EVENT COORDINATORS", cx + 16, detailsBoxY + 20);
+
+  const coord1 = options.coordinator1Name || options.coordinatorName || "Coordinator";
+  const coord1Phone = options.coordinator1Phone || options.coordinatorPhone || "+91 9895461970";
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
   ctx.fillText(
-    `${coordName}  ${coordPhone}`,
-    avatarX + avatarR * 2 + 14,
-    coordCardY + 42
+    `${coord1} (${coord1Phone.replace("+91 ", "")})`,
+    cx + 16,
+    detailsBoxY + 38
   );
 
-  // 12. Outer Border Stroke for the entire Portrait Pass
+  const coord2 = options.coordinator2Name;
+  const coord2Phone = options.coordinator2Phone;
+  ctx.fillStyle = "#64748b";
+  ctx.font = "600 11px system-ui, -apple-system, sans-serif";
+  if (coord2) {
+    ctx.fillText(`${coord2} (${coord2Phone || ""})`, cx + 16, detailsBoxY + 54);
+  } else {
+    ctx.fillText("FOSS CEPerumon Chapter", cx + 16, detailsBoxY + 54);
+  }
+
+  // 12. Warning Notice
+  ctx.textAlign = "center";
+  ctx.fillStyle = theme.primaryDark;
+  ctx.font = "800 11px system-ui, -apple-system, sans-serif";
+  ctx.fillText(
+    "⚠️ SAVE THIS QR PASS • DO NOT MISS IT • SHOW AT ENTRY DESK",
+    cx,
+    detailsBoxY + detailsBoxH + 22
+  );
+
+  // 13. Outer Border Stroke for the entire Portrait Pass
   ctx.restore(); // restore clip
   ctx.strokeStyle = theme.borderTint;
   ctx.lineWidth = 2.5;

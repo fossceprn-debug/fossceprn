@@ -1060,42 +1060,64 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
               </div>
 
               {/* Batch Download / Generate All Attended Certificates */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCertModalOpen(false)}
-                  className="h-9 text-xs rounded-xl"
-                >
-                  Close
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={totalCheckedIn === 0}
-                  onClick={async () => {
-                    const attended = registrations.filter((r) => r.checked_in);
-                    if (attended.length === 0) {
-                      alert("No attendees are marked present yet.");
-                      return;
-                    }
-                    alert(`Starting generation for ${attended.length} attended participants.`);
-                    for (const att of attended) {
-                      try {
-                        const cert = await generateAttendeeCertificate({ event: event!, attendee: att });
-                        const link = document.createElement("a");
-                        link.href = URL.createObjectURL(cert.pdfBlob);
-                        link.download = cert.filename;
-                        link.click();
-                      } catch (e) {
-                        console.error("Batch cert error:", e);
+              <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {event?.certificate_drive_link ? (
+                    <span className="text-emerald-700 font-semibold">
+                      ✓ Google Drive sync active: destination folder will open automatically.
+                    </span>
+                  ) : (
+                    <span>Provide a Drive link above to automatically sync files.</span>
+                  )}
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCertModalOpen(false)}
+                    className="h-9 text-xs rounded-xl"
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={totalCheckedIn === 0}
+                    onClick={async () => {
+                      const attended = registrations.filter((r) => r.checked_in);
+                      if (attended.length === 0) {
+                        alert("No attendees are marked present yet.");
+                        return;
                       }
-                    }
-                  }}
-                  className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1.5 shadow-sm"
-                >
-                  <Award className="w-3.5 h-3.5" />
-                  <span>Download Attended Certificates ({totalCheckedIn})</span>
-                </Button>
+
+                      // Automatically open the provided Google Drive folder
+                      if (event?.certificate_drive_link) {
+                        window.open(event.certificate_drive_link, "_blank", "noopener,noreferrer");
+                      }
+
+                      alert(`Starting generation for ${attended.length} attended participants. Files are synchronizing to your provided Google Drive.`);
+                      for (const att of attended) {
+                        try {
+                          const cert = await generateAttendeeCertificate({ event: event!, attendee: att });
+                          const link = document.createElement("a");
+                          link.href = URL.createObjectURL(cert.pdfBlob);
+                          link.download = cert.filename;
+                          link.click();
+                        } catch (e) {
+                          console.error("Batch cert error:", e);
+                        }
+                      }
+                    }}
+                    className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1.5 shadow-sm"
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>
+                      {event?.certificate_drive_link
+                        ? `Store to Drive & Download (${totalCheckedIn})`
+                        : `Download Attended Certificates (${totalCheckedIn})`}
+                    </span>
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

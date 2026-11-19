@@ -723,32 +723,53 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                 </p>
               </div>
 
-              {/* 6. Event Coordinator Contact Pill Card */}
+              {/* 6. Registered Attendee & Coordinator Details */}
               <div
-                className="rounded-2xl p-2.5 bg-slate-50 border flex items-center gap-3 relative z-10"
+                className="grid grid-cols-2 gap-2 text-left text-xs bg-slate-50/90 rounded-2xl p-2.5 border relative z-10"
                 style={{ borderColor: passTheme.borderTint }}
               >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0 shadow-xs"
-                  style={{ backgroundColor: passTheme.primary }}
-                >
-                  <User className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 flex-1 text-left">
-                  <p className="text-[10px] font-semibold text-slate-500 uppercase leading-none">
-                    Event Coordinator
+                <div>
+                  <span
+                    className="text-[9px] font-extrabold uppercase tracking-wider block"
+                    style={{ color: passTheme.primary }}
+                  >
+                    REGISTERED ATTENDEE
+                  </span>
+                  <p className="font-bold text-slate-900 text-xs mt-0.5 truncate">
+                    {registration?.full_name}
                   </p>
-                  <p className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                  <p className="text-[10px] text-slate-500 truncate">
+                    {registration?.class_semester || registration?.email}
+                  </p>
+                </div>
+
+                <div>
+                  <span
+                    className="text-[9px] font-extrabold uppercase tracking-wider block"
+                    style={{ color: passTheme.primary }}
+                  >
+                    EVENT COORDINATORS
+                  </span>
+                  <p className="font-bold text-slate-900 text-xs mt-0.5 truncate">
                     {[event.coordinator1_name, event.coordinator2_name].filter(Boolean).join(" & ") ||
                       event.coordinator_name ||
                       "FOSS Chapter Coordinator"}
-                    {" "}
-                    <span className="text-[11px] font-semibold text-slate-600">
-                      {event.coordinator1_phone || event.coordinator2_phone || event.coordinator_phone || "+91 9895461970"}
-                    </span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">
+                    {event.coordinator1_phone || event.coordinator2_phone || event.coordinator_phone
+                      ? `Ph: ${event.coordinator1_phone || event.coordinator_phone}`
+                      : "FOSS CEPerumon"}
                   </p>
                 </div>
               </div>
+
+              {/* Warning Banner */}
+              <p
+                className="text-[10px] font-extrabold uppercase tracking-wide text-center relative z-10"
+                style={{ color: passTheme.primaryDark }}
+              >
+                ⚠️ SAVE THIS QR PASS • DO NOT MISS IT • SHOW AT ENTRY DESK
+              </p>
 
               {/* 7. Bottom Decorative Ribbon Waves */}
               <div
