@@ -1,19 +1,17 @@
 // ============================================================================
-// FOSS CEPRN — PROFESSIONAL CERTIFICATE GENERATOR
-// A4 Landscape | Selectable Vector PDF | High-Resolution PNG
+// FOSS CEPRN — CERTIFICATE GENERATOR
+// A4 LANDSCAPE | PROFESSIONAL DESIGN | PDF + PNG
 //
-// FEATURES
-// 1. Selectable and copyable PDF text.
-// 2. Professional three-layer border and corner ornaments.
-// 3. Correct logo aspect ratios.
-// 4. Balanced certificate content with safe text wrapping.
-// 5. Large participant name.
-// 6. Event title wraps automatically.
-// 7. Date only — no event time.
-// 8. Right-side QR verification card.
-// 9. Four authentic signatures with improved clarity and alignment.
-// 10. Matching PDF and PNG.
-// 11. Existing Google Drive sync integration.
+// DESIGN:
+// - Reference-inspired modern certificate
+// - College crest + FOSS CEPRN logo
+// - Large certificate title and participant name
+// - QR verification card on the right
+// - Four signatures in an evenly spaced bottom row
+// - Decorative corner designs
+// - Matching PDF and PNG layout
+// - Selectable PDF text
+// - Google Drive sync
 // ============================================================================
 
 import jsPDF from "jspdf";
@@ -30,6 +28,10 @@ import {
   fossClubLogoBase64,
 } from "./certificateAssets";
 
+// ============================================================================
+// TYPES
+// ============================================================================
+
 export interface CertificateOptions {
   event: EventItem;
   attendee: EventRegistration;
@@ -44,20 +46,26 @@ export interface GeneratedCertificate {
 }
 
 // ============================================================================
-// CONSTANTS
+// PAGE SIZE
 // ============================================================================
 
 const PAGE_W = 297;
 const PAGE_H = 210;
 
-const GREEN = "#047857";
-const DARK_GREEN = "#064e3b";
-const EMERALD = "#10b981";
-const DARK = "#0f172a";
-const SLATE = "#475569";
-const MUTED = "#64748b";
-const LIGHT = "#f8fafc";
-const BORDER = "#cbd5e1";
+const SCALE = 10;
+
+const GREEN = "#00965e";
+const DARK_GREEN = "#006747";
+const BRIGHT_GREEN = "#16b364";
+const BLACK = "#101010";
+const DARK = "#1f2937";
+const GRAY = "#64748b";
+const LIGHT_GRAY = "#d1d5db";
+const WHITE = "#ffffff";
+
+// ============================================================================
+// SIGNATURES
+// ============================================================================
 
 const SIGNATURES = [
   {
@@ -83,7 +91,7 @@ const SIGNATURES = [
 ];
 
 // ============================================================================
-// DATE FORMATTER — DATE ONLY
+// DATE FORMAT
 // ============================================================================
 
 export function formatCertificateDate(
@@ -115,7 +123,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     const img = new Image();
 
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Image loading failed"));
+    img.onerror = () => reject(new Error("Unable to load image"));
 
     img.src = src;
   });
@@ -145,13 +153,13 @@ function containSize(
   };
 }
 
-async function addPdfImageContained(
+async function addPdfImage(
   doc: jsPDF,
   src: string,
   x: number,
   y: number,
-  targetW: number,
-  targetH: number
+  width: number,
+  height: number
 ) {
   try {
     const img = await loadImage(src);
@@ -159,12 +167,12 @@ async function addPdfImageContained(
     const size = containSize(
       img.naturalWidth || img.width,
       img.naturalHeight || img.height,
-      targetW,
-      targetH
+      width,
+      height
     );
 
-    const finalX = x + (targetW - size.width) / 2;
-    const finalY = y + (targetH - size.height) / 2;
+    const finalX = x + (width - size.width) / 2;
+    const finalY = y + (height - size.height) / 2;
 
     doc.addImage(
       src,
@@ -175,41 +183,36 @@ async function addPdfImageContained(
       size.height
     );
   } catch (error) {
-    console.warn("Certificate image could not be rendered:", error);
+    console.warn("Certificate image failed:", error);
   }
 }
 
-function drawCanvasImageContained(
+function drawCanvasImage(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   x: number,
   y: number,
-  targetW: number,
-  targetH: number
+  width: number,
+  height: number
 ) {
   const size = containSize(
     img.naturalWidth || img.width,
     img.naturalHeight || img.height,
-    targetW,
-    targetH
+    width,
+    height
   );
-
-  const finalX = x + (targetW - size.width) / 2;
-  const finalY = y + (targetH - size.height) / 2;
 
   ctx.drawImage(
     img,
-    finalX,
-    finalY,
+    x + (width - size.width) / 2,
+    y + (height - size.height) / 2,
     size.width,
     size.height
   );
 }
 
 // ============================================================================
-// SIGNATURE IMAGE CLEANUP
-// Removes white paper backgrounds while preserving signature strokes.
-// Improves visibility of transparent/white scanned signatures.
+// SIGNATURE CLEANUP
 // ============================================================================
 
 async function prepareSignature(src: string): Promise<string> {
@@ -217,6 +220,7 @@ async function prepareSignature(src: string): Promise<string> {
     const img = await loadImage(src);
 
     const canvas = document.createElement("canvas");
+
     canvas.width = img.naturalWidth || img.width;
     canvas.height = img.naturalHeight || img.height;
 
@@ -233,7 +237,7 @@ async function prepareSignature(src: string): Promise<string> {
       canvas.height
     );
 
-    const pixels = imageData.data;
+    const data = imageData.data;
 
     let minX = canvas.width;
     let minY = canvas.height;
@@ -244,41 +248,39 @@ async function prepareSignature(src: string): Promise<string> {
       for (let x = 0; x < canvas.width; x++) {
         const i = (y * canvas.width + x) * 4;
 
-        const originalAlpha = pixels[i + 3];
+        if (data[i + 3] === 0) continue;
 
-        if (originalAlpha === 0) continue;
-
-        const r = pixels[i];
-        const g = pixels[i + 1];
-        const b = pixels[i + 2];
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
 
         const brightness =
           0.299 * r +
           0.587 * g +
           0.114 * b;
 
-        // Remove white / nearly white scan paper.
-        if (brightness > 246) {
-          pixels[i + 3] = 0;
+        // Remove white scanned paper.
+        if (brightness > 245) {
+          data[i + 3] = 0;
           continue;
         }
 
-        // Preserve antialiased strokes.
-        const darkness = Math.max(
+        // Preserve anti-aliased ink edges.
+        const opacity = Math.max(
           0,
-          Math.min(1, (246 - brightness) / 190)
+          Math.min(1, (245 - brightness) / 180)
         );
 
-        pixels[i + 3] = Math.round(
-          originalAlpha * darkness
+        data[i + 3] = Math.round(
+          data[i + 3] * opacity
         );
 
-        // Dark navy ink for improved contrast.
-        pixels[i] = 18;
-        pixels[i + 1] = 35;
-        pixels[i + 2] = 52;
+        // Improve signature contrast.
+        data[i] = 22;
+        data[i + 1] = 35;
+        data[i + 2] = 48;
 
-        if (pixels[i + 3] > 12) {
+        if (data[i + 3] > 10) {
           minX = Math.min(minX, x);
           minY = Math.min(minY, y);
           maxX = Math.max(maxX, x);
@@ -293,41 +295,48 @@ async function prepareSignature(src: string): Promise<string> {
       return src;
     }
 
-    // Crop unnecessary empty margins.
     const padding = Math.max(
-      5,
+      4,
       Math.round(Math.min(canvas.width, canvas.height) * 0.04)
     );
 
-    const x0 = Math.max(0, minX - padding);
-    const y0 = Math.max(0, minY - padding);
-    const x1 = Math.min(canvas.width, maxX + padding + 1);
-    const y1 = Math.min(canvas.height, maxY + padding + 1);
+    const cropX = Math.max(0, minX - padding);
+    const cropY = Math.max(0, minY - padding);
 
-    const cropped = document.createElement("canvas");
-
-    cropped.width = x1 - x0;
-    cropped.height = y1 - y0;
-
-    const croppedCtx = cropped.getContext("2d");
-
-    if (!croppedCtx) return src;
-
-    croppedCtx.drawImage(
-      canvas,
-      x0,
-      y0,
-      cropped.width,
-      cropped.height,
-      0,
-      0,
-      cropped.width,
-      cropped.height
+    const cropW = Math.min(
+      canvas.width - cropX,
+      maxX - minX + padding * 2
     );
 
-    return cropped.toDataURL("image/png");
+    const cropH = Math.min(
+      canvas.height - cropY,
+      maxY - minY + padding * 2
+    );
+
+    const output = document.createElement("canvas");
+
+    output.width = cropW;
+    output.height = cropH;
+
+    const outputCtx = output.getContext("2d");
+
+    if (!outputCtx) return src;
+
+    outputCtx.drawImage(
+      canvas,
+      cropX,
+      cropY,
+      cropW,
+      cropH,
+      0,
+      0,
+      cropW,
+      cropH
+    );
+
+    return output.toDataURL("image/png");
   } catch (error) {
-    console.warn("Signature cleanup failed:", error);
+    console.warn("Signature processing failed:", error);
     return src;
   }
 }
@@ -336,20 +345,20 @@ async function prepareSignature(src: string): Promise<string> {
 // PDF TEXT HELPERS
 // ============================================================================
 
-function fitPdfText(
+function fitText(
   doc: jsPDF,
   text: string,
   maxWidth: number,
-  initialSize: number,
-  minimumSize: number
+  startSize: number,
+  minSize: number
 ) {
-  let size = initialSize;
+  let size = startSize;
 
   doc.setFontSize(size);
 
   while (
     doc.getTextWidth(text) > maxWidth &&
-    size > minimumSize
+    size > minSize
   ) {
     size -= 0.5;
     doc.setFontSize(size);
@@ -358,105 +367,151 @@ function fitPdfText(
   return size;
 }
 
-function drawCenteredPdfWrappedText(
+function drawWrappedPdfText(
   doc: jsPDF,
   text: string,
   centerX: number,
-  startY: number,
-  maxWidth: number,
+  y: number,
+  width: number,
   fontSize: number,
   lineHeight: number
 ) {
   doc.setFontSize(fontSize);
 
-  const lines = doc.splitTextToSize(text, maxWidth);
+  const lines = doc.splitTextToSize(text, width);
 
-  doc.text(lines, centerX, startY, {
+  doc.text(lines, centerX, y, {
     align: "center",
   });
 
-  return startY + lines.length * lineHeight;
+  return y + lines.length * lineHeight;
 }
 
 // ============================================================================
-// PDF DECORATIVE FRAME
+// PDF BORDER
 // ============================================================================
 
-function drawPdfBorders(doc: jsPDF) {
-  // Outer dark-green frame.
-  doc.setDrawColor(6, 78, 59);
-  doc.setLineWidth(1.25);
+function drawPdfFrame(doc: jsPDF) {
+  // White background.
+  doc.setFillColor(255, 255, 255);
 
   doc.rect(
-    7,
-    7,
-    PAGE_W - 14,
-    PAGE_H - 14
+    0,
+    0,
+    PAGE_W,
+    PAGE_H,
+    "F"
   );
 
-  // Second emerald frame.
-  doc.setDrawColor(16, 185, 129);
-  doc.setLineWidth(0.4);
+  // Outer frame.
+  doc.setDrawColor(35, 35, 35);
+  doc.setLineWidth(0.55);
 
   doc.rect(
-    10,
-    10,
-    PAGE_W - 20,
-    PAGE_H - 20
+    7.5,
+    7.5,
+    PAGE_W - 15,
+    PAGE_H - 15
   );
 
-  // Fine inner frame.
-  doc.setDrawColor(203, 213, 225);
-  doc.setLineWidth(0.25);
+  // Inner frame.
+  doc.setDrawColor(203, 203, 203);
+  doc.setLineWidth(0.3);
 
   doc.rect(
-    13,
-    13,
-    PAGE_W - 26,
-    PAGE_H - 26
+    14,
+    14,
+    PAGE_W - 28,
+    PAGE_H - 28
   );
 
-  drawPdfCornerAccents(doc);
-
-  // Decorative center marks.
-  doc.setFillColor(4, 120, 87);
-
-  doc.circle(PAGE_W / 2, 10, 1, "F");
-  doc.circle(PAGE_W / 2, PAGE_H - 10, 1, "F");
+  // Corner accents.
+  drawPdfCorners(doc);
 }
 
-function drawPdfCornerAccents(doc: jsPDF) {
-  const p = 12;
-  const len = 14;
+function drawPdfCorners(doc: jsPDF) {
+  const length = 21;
+  const margin = 14;
 
-  doc.setDrawColor(4, 120, 87);
-  doc.setLineWidth(1.2);
+  doc.setLineWidth(1.4);
+
+  doc.setDrawColor(0, 150, 94);
 
   // Top left.
-  doc.line(p, p, p + len, p);
-  doc.line(p, p, p, p + len);
+  doc.line(
+    margin,
+    margin,
+    margin + length,
+    margin
+  );
+
+  doc.line(
+    margin,
+    margin,
+    margin,
+    margin + length
+  );
 
   // Top right.
-  doc.line(PAGE_W - p, p, PAGE_W - p - len, p);
-  doc.line(PAGE_W - p, p, PAGE_W - p, p + len);
+  doc.line(
+    PAGE_W - margin,
+    margin,
+    PAGE_W - margin - length,
+    margin
+  );
+
+  doc.line(
+    PAGE_W - margin,
+    margin,
+    PAGE_W - margin,
+    margin + length
+  );
 
   // Bottom left.
-  doc.line(p, PAGE_H - p, p + len, PAGE_H - p);
-  doc.line(p, PAGE_H - p, p, PAGE_H - p - len);
+  doc.line(
+    margin,
+    PAGE_H - margin,
+    margin + length,
+    PAGE_H - margin
+  );
+
+  doc.line(
+    margin,
+    PAGE_H - margin,
+    margin,
+    PAGE_H - margin - length
+  );
 
   // Bottom right.
   doc.line(
-    PAGE_W - p,
-    PAGE_H - p,
-    PAGE_W - p - len,
-    PAGE_H - p
+    PAGE_W - margin,
+    PAGE_H - margin,
+    PAGE_W - margin - length,
+    PAGE_H - margin
   );
 
   doc.line(
-    PAGE_W - p,
-    PAGE_H - p,
-    PAGE_W - p,
-    PAGE_H - p - len
+    PAGE_W - margin,
+    PAGE_H - margin,
+    PAGE_W - margin,
+    PAGE_H - margin - length
+  );
+
+  // Center ornaments.
+  doc.setFillColor(0, 150, 94);
+
+  doc.circle(
+    PAGE_W / 2,
+    14,
+    1.1,
+    "F"
+  );
+
+  doc.circle(
+    PAGE_W / 2,
+    PAGE_H - 14,
+    1.1,
+    "F"
   );
 }
 
@@ -467,59 +522,74 @@ function drawPdfCornerAccents(doc: jsPDF) {
 async function drawPdfHeader(doc: jsPDF) {
   const centerX = 130;
 
-  // Crest and club logo, preserving aspect ratios.
-  await addPdfImageContained(
+  // Logos side by side.
+  await addPdfImage(
     doc,
     crestLogoBase64,
-    centerX - 35,
-    14,
-    22,
+    91,
+    15,
+    25,
     20
   );
 
-  await addPdfImageContained(
+  await addPdfImage(
     doc,
     fossClubLogoBase64,
-    centerX - 10,
-    14,
-    50,
+    126,
+    15,
+    38,
     20
   );
 
+  // Club name.
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12.5);
-  doc.setTextColor(6, 78, 59);
+
+  doc.setFontSize(11.5);
+  doc.setTextColor(0, 80, 54);
 
   doc.text(
     "FREE AND OPEN SOURCE SOFTWARE CLUB",
     centerX,
-    36,
+    38,
     { align: "center" }
   );
 
+  // Organization.
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.8);
-  doc.setTextColor(71, 85, 105);
+
+  doc.setFontSize(7.7);
+  doc.setTextColor(45, 45, 45);
 
   doc.text(
-    "COLLEGE OF ENGINEERING PERUMON  •  FOSS CEPRN",
+    "FOSS CEPRN   |   COLLEGE OF ENGINEERING PERUMON",
     centerX,
-    41.5,
+    43,
     { align: "center" }
   );
 
-  // Divider with decorative center.
-  doc.setDrawColor(16, 185, 129);
+  // Header line.
+  doc.setDrawColor(0, 150, 94);
   doc.setLineWidth(0.4);
 
-  doc.line(centerX - 48, 45, centerX + 48, 45);
+  doc.line(
+    67,
+    47,
+    193,
+    47
+  );
 
-  doc.setFillColor(4, 120, 87);
-  doc.circle(centerX, 45, 1, "F");
+  doc.setFillColor(0, 150, 94);
+
+  doc.circle(
+    centerX,
+    47,
+    0.9,
+    "F"
+  );
 }
 
 // ============================================================================
-// PDF MAIN CONTENT
+// PDF CERTIFICATE CONTENT
 // ============================================================================
 
 function drawPdfMainContent(
@@ -528,86 +598,86 @@ function drawPdfMainContent(
   eventTitle: string,
   formattedDate: string
 ) {
-  // Center content in the area to the left of the QR panel.
   const centerX = 130;
-  const contentWidth = 210;
 
   // Certificate title.
-  doc.setFont("times", "bold");
-  doc.setFontSize(22);
-  doc.setTextColor(4, 120, 87);
+  doc.setFont("helvetica", "bold");
+
+  doc.setFontSize(21);
+  doc.setTextColor(0, 115, 75);
 
   doc.text(
     "CERTIFICATE OF PARTICIPATION",
     centerX,
-    54,
+    57,
     { align: "center" }
   );
 
-  // Small title ornaments.
-  doc.setDrawColor(203, 213, 225);
-  doc.setLineWidth(0.35);
-
-  doc.line(centerX - 53, 57, centerX - 35, 57);
-  doc.line(centerX + 35, 57, centerX + 53, 57);
-
   // Subtitle.
   doc.setFont("times", "italic");
-  doc.setFontSize(10.5);
+
+  doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
 
   doc.text(
     "This certificate is proudly awarded to",
     centerX,
-    64,
+    66,
     { align: "center" }
   );
 
   // Participant name.
   doc.setFont("helvetica", "bold");
 
-  fitPdfText(
+  fitText(
     doc,
     attendeeName,
-    contentWidth,
+    190,
     25,
     14
   );
 
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(20, 20, 20);
 
   doc.text(
     attendeeName,
     centerX,
-    77,
+    78,
     { align: "center" }
   );
 
-  // Dynamic underline.
+  // Name underline.
   const nameWidth = doc.getTextWidth(attendeeName);
 
-  const underlineWidth = Math.min(
-    175,
-    Math.max(75, nameWidth + 15)
+  const lineWidth = Math.min(
+    180,
+    Math.max(90, nameWidth + 20)
   );
 
-  doc.setDrawColor(16, 185, 129);
-  doc.setLineWidth(0.55);
+  doc.setDrawColor(0, 150, 94);
+  doc.setLineWidth(0.65);
 
   doc.line(
-    centerX - underlineWidth / 2,
-    81,
-    centerX + underlineWidth / 2,
-    81
+    centerX - lineWidth / 2,
+    82,
+    centerX + lineWidth / 2,
+    82
   );
 
-  doc.setFillColor(4, 120, 87);
-  doc.circle(centerX, 81, 0.9, "F");
+  doc.setFillColor(0, 150, 94);
 
-  // Description.
+  doc.circle(
+    centerX,
+    82,
+    0.85,
+    "F"
+  );
+
+  // Participation text.
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.setTextColor(51, 65, 85);
+
+  doc.setFontSize(9.2);
+  doc.setTextColor(50, 50, 50);
 
   doc.text(
     "in recognition of their active participation in",
@@ -616,19 +686,20 @@ function drawPdfMainContent(
     { align: "center" }
   );
 
-  // Event title — automatically wraps.
+  // Event title.
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.setTextColor(4, 120, 87);
+
+  doc.setFontSize(12.5);
+  doc.setTextColor(0, 130, 80);
 
   const eventLines = doc.splitTextToSize(
     eventTitle,
-    contentWidth
+    185
   );
 
   if (eventLines.length > 2) {
     doc.setFontSize(10.5);
-  } else if (eventTitle.length > 45) {
+  } else if (eventTitle.length > 40) {
     doc.setFontSize(11.5);
   }
 
@@ -639,56 +710,56 @@ function drawPdfMainContent(
     { align: "center" }
   );
 
-  const eventBottom = 98 + eventLines.length * 5;
+  const eventBottom =
+    98 + eventLines.length * 4.8;
 
-  // Event date — never includes time.
+  // Date.
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.3);
-  doc.setTextColor(71, 85, 105);
 
-  const description =
+  doc.setFontSize(8);
+  doc.setTextColor(70, 70, 70);
+
+  const dateText =
     `Organized by FOSS CEPRN, College of Engineering Perumon, conducted on ${formattedDate}.`;
 
-  const descriptionLines = doc.splitTextToSize(
-    description,
-    contentWidth
+  const dateLines = doc.splitTextToSize(
+    dateText,
+    185
   );
 
-  const descriptionY = eventBottom + 5;
+  const dateY = eventBottom + 4;
 
   doc.text(
-    descriptionLines,
+    dateLines,
     centerX,
-    descriptionY,
+    dateY,
     { align: "center" }
   );
 
-  // Closing appreciation statement.
+  // Appreciation text.
   doc.setFont("times", "italic");
-  doc.setFontSize(8.3);
-  doc.setTextColor(100, 116, 139);
+
+  doc.setFontSize(7.8);
+  doc.setTextColor(120, 120, 120);
 
   const appreciation =
     "With appreciation for their enthusiasm, learning, and contribution to the open-source community.";
 
   const appreciationLines = doc.splitTextToSize(
     appreciation,
-    contentWidth
+    185
   );
-
-  const appreciationY =
-    descriptionY + descriptionLines.length * 4.2 + 2;
 
   doc.text(
     appreciationLines,
     centerX,
-    appreciationY,
+    dateY + dateLines.length * 4 + 2,
     { align: "center" }
   );
 }
 
 // ============================================================================
-// PDF VERIFICATION QR
+// PDF QR CARD
 // ============================================================================
 
 function drawPdfQr(
@@ -698,28 +769,28 @@ function drawPdfQr(
 ) {
   if (!qrDataUrl) return;
 
-  const x = 245;
-  const y = 82;
-  const w = 41;
-  const h = 54;
+  const x = 244;
+  const y = 75;
+  const w = 42;
+  const h = 59;
 
-  // QR card.
-  doc.setFillColor(249, 252, 250);
-  doc.setDrawColor(16, 185, 129);
-  doc.setLineWidth(0.45);
+  // Card.
+  doc.setFillColor(250, 253, 251);
+  doc.setDrawColor(0, 150, 94);
+  doc.setLineWidth(0.55);
 
   doc.roundedRect(
     x,
     y,
     w,
     h,
-    2.2,
-    2.2,
+    2,
+    2,
     "FD"
   );
 
-  // Header label.
-  doc.setFillColor(4, 120, 87);
+  // Card heading.
+  doc.setFillColor(0, 115, 75);
 
   doc.roundedRect(
     x + 3,
@@ -732,7 +803,8 @@ function drawPdfQr(
   );
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(5.8);
+
+  doc.setFontSize(5.6);
   doc.setTextColor(255, 255, 255);
 
   doc.text(
@@ -742,54 +814,56 @@ function drawPdfQr(
     { align: "center" }
   );
 
-  // QR.
+  // QR image.
   try {
     doc.addImage(
       qrDataUrl,
       "PNG",
-      x + 5.5,
+      x + 5,
       y + 11,
-      30,
-      30
+      32,
+      32
     );
   } catch (error) {
-    console.warn("QR could not be embedded:", error);
+    console.warn("QR embedding failed:", error);
   }
 
   // Certificate ID.
   doc.setFont("courier", "bold");
-  doc.setFontSize(5.1);
-  doc.setTextColor(51, 65, 85);
 
-  fitPdfText(
+  fitText(
     doc,
     certId,
     w - 5,
-    5.1,
+    5,
     3.5
   );
+
+  doc.setTextColor(35, 35, 35);
 
   doc.text(
     certId,
     x + w / 2,
-    y + 43.5,
+    y + 46,
     { align: "center" }
   );
 
+  // Verification label.
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(5.5);
-  doc.setTextColor(4, 120, 87);
+
+  doc.setFontSize(5.4);
+  doc.setTextColor(0, 115, 75);
 
   doc.text(
     "SCAN • VERIFY • AUTHENTIC",
     x + w / 2,
-    y + 49,
+    y + 52,
     { align: "center" }
   );
 }
 
 // ============================================================================
-// PDF SIGNATURE SECTION
+// PDF SIGNATURES
 // ============================================================================
 
 async function drawPdfSignatures(
@@ -798,94 +872,295 @@ async function drawPdfSignatures(
 ) {
   const centers = [39, 112, 185, 258];
 
-  const imageY = 145;
-  const imageHeight = 17;
-  const signatureLineY = 165.5;
+  const imageY = 140;
+  const imageH = 18;
+
+  const lineY = 162;
 
   for (let i = 0; i < SIGNATURES.length; i++) {
-    const sig = SIGNATURES[i];
+    const signature = SIGNATURES[i];
     const center = centers[i];
 
-    // Signature image.
-    await addPdfImageContained(
+    // Signature.
+    await addPdfImage(
       doc,
-      preparedSignatures[i] || sig.src,
+      preparedSignatures[i] || signature.src,
       center - 22,
       imageY,
       44,
-      imageHeight
+      imageH
     );
 
-    // Signature line.
-    doc.setDrawColor(100, 116, 139);
+    // Signature baseline.
+    doc.setDrawColor(110, 120, 130);
     doc.setLineWidth(0.35);
 
     doc.line(
       center - 23,
-      signatureLineY,
+      lineY,
       center + 23,
-      signatureLineY
+      lineY
     );
 
     // Name.
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.3);
-    doc.setTextColor(15, 23, 42);
+
+    doc.setFontSize(7.1);
+    doc.setTextColor(20, 20, 20);
+
+    fitText(
+      doc,
+      signature.name,
+      48,
+      7.1,
+      5.7
+    );
 
     doc.text(
-      sig.name,
+      signature.name,
       center,
-      171,
+      167,
       { align: "center" }
     );
 
     // Designation.
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
-    doc.setTextColor(71, 85, 105);
+
+    doc.setFontSize(6.2);
+    doc.setTextColor(70, 70, 70);
 
     doc.text(
-      sig.role,
+      signature.role,
       center,
-      175.5,
+      172,
       { align: "center" }
     );
   }
 
   // Footer divider.
-  doc.setDrawColor(16, 185, 129);
-  doc.setLineWidth(0.25);
+  doc.setDrawColor(0, 150, 94);
+  doc.setLineWidth(0.3);
 
-  doc.line(18, 181, 279, 181);
+  doc.line(
+    18,
+    179,
+    279,
+    179
+  );
 
+  // Footer text.
   doc.setFont("times", "italic");
-  doc.setFontSize(6.2);
-  doc.setTextColor(100, 116, 139);
+
+  doc.setFontSize(6.3);
+  doc.setTextColor(120, 120, 120);
 
   doc.text(
     "FOSS CEPRN  •  College of Engineering Perumon",
     PAGE_W / 2,
-    186,
+    184,
     { align: "center" }
   );
 }
 
 // ============================================================================
-// CANVAS HELPERS
+// CANVAS DECORATION
 // ============================================================================
 
-function canvasWrapText(
+function drawCanvasFrame(
+  ctx: CanvasRenderingContext2D
+) {
+  // Background.
+  ctx.fillStyle = WHITE;
+
+  ctx.fillRect(
+    0,
+    0,
+    PAGE_W,
+    PAGE_H
+  );
+
+  // Outer border.
+  ctx.strokeStyle = "#333333";
+  ctx.lineWidth = 0.55;
+
+  ctx.strokeRect(
+    7.5,
+    7.5,
+    PAGE_W - 15,
+    PAGE_H - 15
+  );
+
+  // Inner border.
+  ctx.strokeStyle = "#d0d0d0";
+  ctx.lineWidth = 0.3;
+
+  ctx.strokeRect(
+    14,
+    14,
+    PAGE_W - 28,
+    PAGE_H - 28
+  );
+
+  // Corner designs.
+  drawCanvasCorners(ctx);
+}
+
+function drawCanvasCorners(
+  ctx: CanvasRenderingContext2D
+) {
+  // Top-left black/gray abstract blocks.
+  ctx.fillStyle = "#111111";
+
+  ctx.beginPath();
+
+  ctx.moveTo(0, 0);
+  ctx.lineTo(31, 0);
+  ctx.lineTo(26, 22);
+  ctx.lineTo(0, 18);
+
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#666666";
+
+  ctx.beginPath();
+
+  ctx.moveTo(0, 18);
+  ctx.lineTo(22, 23);
+  ctx.lineTo(16, 43);
+  ctx.lineTo(0, 40);
+
+  ctx.closePath();
+  ctx.fill();
+
+  // Top-right green shapes.
+  ctx.fillStyle = "#10b364";
+
+  ctx.beginPath();
+
+  ctx.moveTo(270, 0);
+  ctx.lineTo(297, 0);
+  ctx.lineTo(297, 18);
+  ctx.lineTo(279, 26);
+
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = "#16b364";
+  ctx.lineWidth = 1.1;
+
+  ctx.beginPath();
+
+  ctx.moveTo(268, 8);
+  ctx.lineTo(281, 35);
+  ctx.lineTo(297, 29);
+
+  ctx.stroke();
+
+  ctx.beginPath();
+
+  ctx.moveTo(265, 14);
+  ctx.lineTo(278, 37);
+  ctx.lineTo(297, 32);
+
+  ctx.stroke();
+
+  // Bottom-left green accent.
+  ctx.strokeStyle = "#10b364";
+  ctx.lineWidth = 1.1;
+
+  for (let i = 0; i < 3; i++) {
+    const offset = i * 4;
+
+    ctx.beginPath();
+
+    ctx.moveTo(0, 197 - offset);
+    ctx.lineTo(26 - offset, 197 - offset);
+    ctx.lineTo(22 - offset, 210 - offset);
+
+    ctx.stroke();
+  }
+
+  // Bottom-right dotted pattern.
+  ctx.fillStyle = "#dddddd";
+
+  for (let row = 0; row < 6; row++) {
+    for (let col = 0; col < 6; col++) {
+      const x = 277 + col * 3;
+      const y = 184 + row * 3;
+
+      if (x > PAGE_W || y > PAGE_H) continue;
+
+      ctx.beginPath();
+
+      ctx.arc(
+        x,
+        y,
+        1.35,
+        0,
+        Math.PI * 2
+      );
+
+      ctx.fill();
+    }
+  }
+
+  // Dark green dots in the pattern.
+  ctx.fillStyle = "#333333";
+
+  ctx.beginPath();
+  ctx.arc(285, 193, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(291, 187, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ============================================================================
+// CANVAS TEXT HELPERS
+// ============================================================================
+
+function canvasFitFont(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  initialSize: number,
+  minimumSize: number,
+  family = "Arial",
+  weight = "bold"
+) {
+  let size = initialSize;
+
+  while (size > minimumSize) {
+    ctx.font = `${weight} ${size}px ${family}`;
+
+    if (ctx.measureText(text).width <= maxWidth) {
+      break;
+    }
+
+    size -= 0.2;
+  }
+
+  ctx.font = `${weight} ${size}px ${family}`;
+
+  return size;
+}
+
+function canvasWrap(
   ctx: CanvasRenderingContext2D,
   text: string,
   maxWidth: number
 ): string[] {
   const words = text.split(/\s+/);
-  const lines: string[] = [];
 
+  const lines: string[] = [];
   let current = "";
 
   for (const word of words) {
-    const test = current ? `${current} ${word}` : word;
+    const test = current
+      ? `${current} ${word}`
+      : word;
 
     if (
       ctx.measureText(test).width > maxWidth &&
@@ -903,331 +1178,223 @@ function canvasWrapText(
   return lines;
 }
 
-function canvasTextFit(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  startingSize: number,
-  minSize: number,
-  fontPrefix = "bold"
-) {
-  let size = startingSize;
-
-  while (size > minSize) {
-    ctx.font = `${fontPrefix} ${size}px Arial, sans-serif`;
-
-    if (ctx.measureText(text).width <= maxWidth) {
-      break;
-    }
-
-    size -= 1;
-  }
-
-  ctx.font = `${fontPrefix} ${size}px Arial, sans-serif`;
-
-  return size;
-}
-
-function drawCanvasRoundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  radius: number
-) {
-  ctx.beginPath();
-
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + w - radius, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-
-  ctx.lineTo(x + w, y + h - radius);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-
-  ctx.lineTo(x + radius, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-
-  ctx.closePath();
-}
-
 // ============================================================================
-// PNG FRAME
-// ============================================================================
-
-function drawCanvasFrame(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number
-) {
-  // Outer frame.
-  ctx.strokeStyle = DARK_GREEN;
-  ctx.lineWidth = 12;
-
-  ctx.strokeRect(
-    70,
-    70,
-    width - 140,
-    height - 140
-  );
-
-  // Emerald frame.
-  ctx.strokeStyle = EMERALD;
-  ctx.lineWidth = 4;
-
-  ctx.strokeRect(
-    100,
-    100,
-    width - 200,
-    height - 200
-  );
-
-  // Fine inside frame.
-  ctx.strokeStyle = BORDER;
-  ctx.lineWidth = 2;
-
-  ctx.strokeRect(
-    130,
-    130,
-    width - 260,
-    height - 260
-  );
-
-  // Corner accents.
-  const p = 130;
-  const len = 125;
-
-  ctx.strokeStyle = GREEN;
-  ctx.lineWidth = 11;
-
-  ctx.beginPath();
-
-  // Top-left.
-  ctx.moveTo(p, p);
-  ctx.lineTo(p + len, p);
-  ctx.moveTo(p, p);
-  ctx.lineTo(p, p + len);
-
-  // Top-right.
-  ctx.moveTo(width - p, p);
-  ctx.lineTo(width - p - len, p);
-  ctx.moveTo(width - p, p);
-  ctx.lineTo(width - p, p + len);
-
-  // Bottom-left.
-  ctx.moveTo(p, height - p);
-  ctx.lineTo(p + len, height - p);
-  ctx.moveTo(p, height - p);
-  ctx.lineTo(p, height - p - len);
-
-  // Bottom-right.
-  ctx.moveTo(width - p, height - p);
-  ctx.lineTo(width - p - len, height - p);
-  ctx.moveTo(width - p, height - p);
-  ctx.lineTo(width - p, height - p - len);
-
-  ctx.stroke();
-
-  // Center ornaments.
-  ctx.fillStyle = GREEN;
-
-  ctx.beginPath();
-  ctx.arc(width / 2, 100, 10, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.arc(width / 2, height - 100, 10, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-// ============================================================================
-// PNG HEADER
+// CANVAS HEADER
 // ============================================================================
 
 async function drawCanvasHeader(
-  ctx: CanvasRenderingContext2D,
-  centerX: number
+  ctx: CanvasRenderingContext2D
 ) {
+  const centerX = 130;
+
   const crest = await loadImage(crestLogoBase64);
   const foss = await loadImage(fossClubLogoBase64);
 
-  // Logos retain original proportions.
-  drawCanvasImageContained(
+  // Logos.
+  drawCanvasImage(
     ctx,
     crest,
-    centerX - 360,
-    135,
-    210,
-    190
+    91,
+    15,
+    25,
+    20
   );
 
-  drawCanvasImageContained(
+  drawCanvasImage(
     ctx,
     foss,
-    centerX - 105,
-    135,
-    500,
-    190
+    126,
+    15,
+    38,
+    20
   );
 
-  // Organization title.
+  // Club name.
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
 
-  ctx.fillStyle = DARK_GREEN;
-  ctx.font = "bold 38px Arial, sans-serif";
+  ctx.fillStyle = "#005036";
+
+  ctx.font = "bold 3.8px Arial";
 
   ctx.fillText(
     "FREE AND OPEN SOURCE SOFTWARE CLUB",
     centerX,
-    360
+    38
   );
 
-  ctx.fillStyle = SLATE;
-  ctx.font = "24px Arial, sans-serif";
+  // Organization.
+  ctx.fillStyle = "#333333";
+
+  ctx.font = "3px Arial";
 
   ctx.fillText(
-    "COLLEGE OF ENGINEERING PERUMON  •  FOSS CEPRN",
+    "FOSS CEPRN  |  COLLEGE OF ENGINEERING PERUMON",
     centerX,
-    410
+    43
   );
 
   // Divider.
-  ctx.strokeStyle = EMERALD;
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = GREEN;
+  ctx.lineWidth = 0.4;
 
   ctx.beginPath();
-  ctx.moveTo(centerX - 470, 450);
-  ctx.lineTo(centerX + 470, 450);
+
+  ctx.moveTo(67, 47);
+  ctx.lineTo(193, 47);
+
   ctx.stroke();
 
   ctx.fillStyle = GREEN;
 
   ctx.beginPath();
-  ctx.arc(centerX, 450, 10, 0, Math.PI * 2);
+
+  ctx.arc(
+    centerX,
+    47,
+    0.9,
+    0,
+    Math.PI * 2
+  );
+
   ctx.fill();
 }
 
 // ============================================================================
-// PNG MAIN CONTENT
+// CANVAS MAIN CONTENT
 // ============================================================================
 
 function drawCanvasMainContent(
   ctx: CanvasRenderingContext2D,
-  centerX: number,
   attendeeName: string,
   eventTitle: string,
   formattedDate: string
 ) {
-  const contentWidth = 2100;
+  const centerX = 130;
 
-  // Certificate title.
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
 
-  ctx.fillStyle = GREEN;
-  ctx.font = "bold 64px Georgia, 'Times New Roman', serif";
+  // Title.
+  ctx.fillStyle = "#00734b";
+
+  canvasFitFont(
+    ctx,
+    "CERTIFICATE OF PARTICIPATION",
+    205,
+    8,
+    5.5,
+    "Georgia",
+    "bold"
+  );
 
   ctx.fillText(
     "CERTIFICATE OF PARTICIPATION",
     centerX,
-    545
+    57
   );
 
-  // Title ornaments.
-  ctx.strokeStyle = BORDER;
-  ctx.lineWidth = 3;
-
-  ctx.beginPath();
-  ctx.moveTo(centerX - 530, 575);
-  ctx.lineTo(centerX - 350, 575);
-
-  ctx.moveTo(centerX + 350, 575);
-  ctx.lineTo(centerX + 530, 575);
-
-  ctx.stroke();
-
   // Subtitle.
-  ctx.fillStyle = MUTED;
-  ctx.font = "italic 30px Georgia, 'Times New Roman', serif";
+  ctx.fillStyle = "#777777";
+
+  ctx.font = "italic 3.4px Georgia";
 
   ctx.fillText(
     "This certificate is proudly awarded to",
     centerX,
-    635
+    66
   );
 
-  // Participant name.
-  ctx.fillStyle = DARK;
+  // Name.
+  ctx.fillStyle = "#111111";
 
-  canvasTextFit(
+  canvasFitFont(
     ctx,
     attendeeName,
-    contentWidth,
-    76,
-    40
+    190,
+    7.5,
+    4.5,
+    "Arial",
+    "bold"
   );
 
   ctx.fillText(
     attendeeName,
     centerX,
-    785
+    78
   );
 
   // Name underline.
   const nameWidth = ctx.measureText(attendeeName).width;
 
   const lineWidth = Math.min(
-    1800,
-    Math.max(850, nameWidth + 150)
+    180,
+    Math.max(90, nameWidth + 20)
   );
 
-  ctx.strokeStyle = EMERALD;
-  ctx.lineWidth = 5;
+  ctx.strokeStyle = GREEN;
+  ctx.lineWidth = 0.65;
 
   ctx.beginPath();
-  ctx.moveTo(centerX - lineWidth / 2, 820);
-  ctx.lineTo(centerX + lineWidth / 2, 820);
+
+  ctx.moveTo(
+    centerX - lineWidth / 2,
+    82
+  );
+
+  ctx.lineTo(
+    centerX + lineWidth / 2,
+    82
+  );
+
   ctx.stroke();
 
   ctx.fillStyle = GREEN;
 
   ctx.beginPath();
-  ctx.arc(centerX, 820, 9, 0, Math.PI * 2);
+
+  ctx.arc(
+    centerX,
+    82,
+    0.85,
+    0,
+    Math.PI * 2
+  );
+
   ctx.fill();
 
-  // Description.
-  ctx.fillStyle = "#334155";
-  ctx.font = "29px Arial, sans-serif";
+  // Participation sentence.
+  ctx.fillStyle = "#333333";
+
+  ctx.font = "3.3px Arial";
 
   ctx.fillText(
     "in recognition of their active participation in",
     centerX,
-    910
+    90
   );
 
   // Event title.
-  ctx.fillStyle = GREEN;
+  ctx.fillStyle = "#008250";
 
-  canvasTextFit(
+  canvasFitFont(
     ctx,
     eventTitle,
-    contentWidth,
-    40,
-    24
+    185,
+    4.4,
+    3,
+    "Arial",
+    "bold"
   );
 
-  const eventLines = canvasWrapText(
+  const eventLines = canvasWrap(
     ctx,
     eventTitle,
-    contentWidth
+    185
   );
 
-  const eventY = 980;
-  const eventLineHeight = 48;
+  const eventY = 98;
+  const eventLineHeight = 5;
 
   eventLines.forEach((line, index) => {
     ctx.fillText(
@@ -1237,57 +1404,59 @@ function drawCanvasMainContent(
     );
   });
 
-  // Date description.
-  ctx.fillStyle = SLATE;
-  ctx.font = "25px Arial, sans-serif";
+  // Event date.
+  ctx.fillStyle = "#4b5563";
+
+  ctx.font = "2.7px Arial";
 
   const description =
     `Organized by FOSS CEPRN, College of Engineering Perumon, conducted on ${formattedDate}.`;
 
-  const descriptionLines = canvasWrapText(
+  const dateLines = canvasWrap(
     ctx,
     description,
-    contentWidth
+    185
   );
 
-  const descriptionY =
-    eventY + eventLines.length * eventLineHeight + 35;
+  const dateY =
+    eventY + eventLines.length * eventLineHeight + 4;
 
-  descriptionLines.forEach((line, index) => {
+  dateLines.forEach((line, index) => {
     ctx.fillText(
       line,
       centerX,
-      descriptionY + index * 38
+      dateY + index * 3.5
     );
   });
 
   // Appreciation.
-  ctx.fillStyle = MUTED;
-  ctx.font = "italic 25px Georgia, 'Times New Roman', serif";
+  ctx.fillStyle = "#888888";
+
+  ctx.font = "italic 2.7px Georgia";
 
   const appreciation =
     "With appreciation for their enthusiasm, learning, and contribution to the open-source community.";
 
-  const appreciationLines = canvasWrapText(
+  const appreciationLines = canvasWrap(
     ctx,
     appreciation,
-    contentWidth
+    185
   );
 
   const appreciationY =
-    descriptionY + descriptionLines.length * 38 + 32;
+    dateY + dateLines.length * 3.5 + 2;
 
   appreciationLines.forEach((line, index) => {
     ctx.fillText(
       line,
       centerX,
-      appreciationY + index * 36
+      appreciationY + index * 3.5
     );
   });
 }
 
 // ============================================================================
-// PNG QR PANEL
+// CANVAS QR
 // ============================================================================
 
 async function drawCanvasQr(
@@ -1300,89 +1469,92 @@ async function drawCanvasQr(
   try {
     const qr = await loadImage(qrDataUrl);
 
-    const x = 2450;
-    const y = 820;
-    const w = 410;
-    const h = 540;
+    const x = 244;
+    const y = 75;
+    const w = 42;
+    const h = 59;
 
-    // Card background.
-    ctx.fillStyle = "#f9fcfa";
-    ctx.strokeStyle = EMERALD;
-    ctx.lineWidth = 4;
+    // Card.
+    ctx.fillStyle = "#fbfdfc";
+    ctx.strokeStyle = GREEN;
+    ctx.lineWidth = 0.55;
 
-    drawCanvasRoundedRect(
-      ctx,
+    ctx.beginPath();
+
+    ctx.roundRect(
       x,
       y,
       w,
       h,
-      24
+      2
     );
 
     ctx.fill();
     ctx.stroke();
 
-    // Label strip.
-    ctx.fillStyle = GREEN;
+    // Header.
+    ctx.fillStyle = DARK_GREEN;
 
-    drawCanvasRoundedRect(
-      ctx,
-      x + 30,
-      y + 30,
-      w - 60,
-      58,
-      14
+    ctx.beginPath();
+
+    ctx.roundRect(
+      x + 3,
+      y + 3,
+      w - 6,
+      5.5,
+      1
     );
 
     ctx.fill();
 
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 19px Arial, sans-serif";
-
     ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+
+    ctx.fillStyle = WHITE;
+    ctx.font = "bold 1.8px Arial";
 
     ctx.fillText(
       "CERTIFICATE VERIFICATION",
       x + w / 2,
-      y + 67
+      y + 6.7
     );
 
-    // QR image.
+    // QR.
     ctx.drawImage(
       qr,
-      x + 55,
-      y + 110,
-      300,
-      300
+      x + 5,
+      y + 11,
+      32,
+      32
     );
 
     // Certificate ID.
-    ctx.fillStyle = "#334155";
-    ctx.font = "bold 15px monospace";
+    ctx.fillStyle = "#222222";
 
-    canvasTextFit(
+    canvasFitFont(
       ctx,
       certId,
-      w - 40,
-      15,
-      10,
+      w - 5,
+      1.65,
+      1.1,
+      "monospace",
       "bold"
     );
 
     ctx.fillText(
       certId,
       x + w / 2,
-      y + 440
+      y + 46
     );
 
-    // Verification caption.
+    // Footer.
     ctx.fillStyle = GREEN;
-    ctx.font = "bold 16px Arial, sans-serif";
+    ctx.font = "bold 1.65px Arial";
 
     ctx.fillText(
       "SCAN • VERIFY • AUTHENTIC",
       x + w / 2,
-      y + 490
+      y + 52
     );
   } catch (error) {
     console.warn("PNG QR rendering failed:", error);
@@ -1390,93 +1562,116 @@ async function drawCanvasQr(
 }
 
 // ============================================================================
-// PNG SIGNATURE SECTION
+// CANVAS SIGNATURES
 // ============================================================================
 
 async function drawCanvasSignatures(
   ctx: CanvasRenderingContext2D,
   preparedSignatures: string[]
 ) {
-  const centers = [390, 1120, 1850, 2580];
+  const centers = [39, 112, 185, 258];
 
-  const signatureTop = 1450;
-  const signatureLineY = 1655;
+  const imageY = 140;
+  const imageH = 18;
+
+  const lineY = 162;
 
   for (let i = 0; i < SIGNATURES.length; i++) {
-    const sig = SIGNATURES[i];
+    const signature = SIGNATURES[i];
     const center = centers[i];
 
     try {
       const img = await loadImage(
-        preparedSignatures[i] || sig.src
+        preparedSignatures[i] || signature.src
       );
 
-      drawCanvasImageContained(
+      drawCanvasImage(
         ctx,
         img,
-        center - 230,
-        signatureTop,
-        460,
-        175
+        center - 22,
+        imageY,
+        44,
+        imageH
       );
     } catch (error) {
       console.warn(
-        `Signature image failed: ${sig.name}`,
+        "Canvas signature failed:",
+        signature.name,
         error
       );
     }
 
-    // Signature baseline.
-    ctx.strokeStyle = SLATE;
-    ctx.lineWidth = 3;
+    // Signature line.
+    ctx.strokeStyle = "#7c8794";
+    ctx.lineWidth = 0.35;
 
     ctx.beginPath();
-    ctx.moveTo(center - 225, signatureLineY);
-    ctx.lineTo(center + 225, signatureLineY);
+
+    ctx.moveTo(
+      center - 23,
+      lineY
+    );
+
+    ctx.lineTo(
+      center + 23,
+      lineY
+    );
+
     ctx.stroke();
 
     // Name.
-    ctx.fillStyle = DARK;
-    ctx.font = "bold 24px Arial, sans-serif";
+    ctx.fillStyle = "#111111";
 
-    ctx.textAlign = "center";
-
-    ctx.fillText(
-      sig.name,
-      center,
-      1710
+    canvasFitFont(
+      ctx,
+      signature.name,
+      48,
+      2.5,
+      1.8,
+      "Arial",
+      "bold"
     );
 
-    // Role.
-    ctx.fillStyle = SLATE;
-    ctx.font = "21px Arial, sans-serif";
+    ctx.fillText(
+      signature.name,
+      center,
+      167
+    );
+
+    // Designation.
+    ctx.fillStyle = "#555555";
+
+    ctx.font = "2.1px Arial";
 
     ctx.fillText(
-      sig.role,
+      signature.role,
       center,
-      1750
+      172
     );
   }
 
   // Footer divider.
-  ctx.strokeStyle = EMERALD;
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = GREEN;
+  ctx.lineWidth = 0.3;
 
   ctx.beginPath();
-  ctx.moveTo(180, 1810);
-  ctx.lineTo(2790, 1810);
+
+  ctx.moveTo(18, 179);
+  ctx.lineTo(279, 179);
+
   ctx.stroke();
 
   // Footer.
-  ctx.fillStyle = MUTED;
-  ctx.font = "italic 21px Georgia, 'Times New Roman', serif";
+  ctx.fillStyle = "#888888";
+
+  ctx.font = "italic 2.1px Georgia";
 
   ctx.textAlign = "center";
 
   ctx.fillText(
     "FOSS CEPRN  •  College of Engineering Perumon",
-    1485,
-    1850
+    PAGE_W / 2,
+    184
   );
 }
 
@@ -1501,48 +1696,42 @@ async function generateCertificatePng(params: {
     preparedSignatures,
   } = params;
 
-  const width = 2970;
-  const height = 2100;
-  const centerX = 1300;
-
   const canvas = document.createElement("canvas");
 
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = PAGE_W * SCALE;
+  canvas.height = PAGE_H * SCALE;
 
   const ctx = canvas.getContext("2d");
 
   if (!ctx) {
-    throw new Error("Could not create certificate canvas");
+    throw new Error("Canvas is not available");
   }
 
-  // Background.
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
+  // Scale canvas into mm-based layout coordinates.
+  ctx.scale(SCALE, SCALE);
 
-  // Decorative border.
-  drawCanvasFrame(ctx, width, height);
+  // Frame.
+  drawCanvasFrame(ctx);
 
-  // Header logos and typography.
-  await drawCanvasHeader(ctx, centerX);
+  // Header.
+  await drawCanvasHeader(ctx);
 
-  // Certificate main text.
+  // Main certificate content.
   drawCanvasMainContent(
     ctx,
-    centerX,
     attendeeName,
     eventTitle,
     formattedDate
   );
 
-  // QR verification panel.
+  // QR.
   await drawCanvasQr(
     ctx,
     qrDataUrl,
     certId
   );
 
-  // Signatures and footer.
+  // Signatures.
   await drawCanvasSignatures(
     ctx,
     preparedSignatures
@@ -1552,7 +1741,7 @@ async function generateCertificatePng(params: {
 }
 
 // ============================================================================
-// MAIN CERTIFICATE GENERATOR
+// MAIN GENERATOR
 // ============================================================================
 
 export async function generateAttendeeCertificate(
@@ -1560,7 +1749,7 @@ export async function generateAttendeeCertificate(
 ): Promise<GeneratedCertificate> {
   const { event, attendee } = options;
 
-  // Only attended participants can receive certificates.
+  // Must be checked in.
   if (!attendee.checked_in) {
     throw new Error(
       `Cannot generate certificate: ${attendee.full_name} is not marked as checked-in/present.`
@@ -1598,14 +1787,14 @@ export async function generateAttendeeCertificate(
     `&date=${encodeURIComponent(formattedDate)}` +
     `&status=VALID`;
 
-  // QR code.
+  // QR generation.
   let qrDataUrl = "";
 
   try {
     qrDataUrl = await QRCode.toDataURL(
       verifyUrl,
       {
-        width: 600,
+        width: 800,
         margin: 2,
         color: {
           dark: "#064e3b",
@@ -1618,7 +1807,7 @@ export async function generateAttendeeCertificate(
     console.warn("QR generation failed:", error);
   }
 
-  // Clean signature assets for better visibility.
+  // Prepare signatures.
   const preparedSignatures = await Promise.all(
     SIGNATURES.map((signature) =>
       prepareSignature(signature.src)
@@ -1626,7 +1815,7 @@ export async function generateAttendeeCertificate(
   );
 
   // ==========================================================================
-  // 1. PDF GENERATION
+  // PDF
   // ==========================================================================
 
   const doc = new jsPDF({
@@ -1636,13 +1825,10 @@ export async function generateAttendeeCertificate(
     compress: true,
   });
 
-  // Frame.
-  drawPdfBorders(doc);
+  drawPdfFrame(doc);
 
-  // Logos and header.
   await drawPdfHeader(doc);
 
-  // Main certificate text.
   drawPdfMainContent(
     doc,
     attendeeName,
@@ -1650,21 +1836,19 @@ export async function generateAttendeeCertificate(
     formattedDate
   );
 
-  // QR.
   drawPdfQr(
     doc,
     qrDataUrl,
     certId
   );
 
-  // Four signatures.
   await drawPdfSignatures(
     doc,
     preparedSignatures
   );
 
   // ==========================================================================
-  // PDF OUTPUT
+  // OUTPUT
   // ==========================================================================
 
   const cleanName = attendee.full_name
@@ -1680,7 +1864,7 @@ export async function generateAttendeeCertificate(
     .split(",")[1];
 
   // ==========================================================================
-  // 2. HIGH-RESOLUTION PNG
+  // PNG
   // ==========================================================================
 
   const pngDataUrl = await generateCertificatePng({
@@ -1693,7 +1877,7 @@ export async function generateAttendeeCertificate(
   });
 
   // ==========================================================================
-  // 3. GOOGLE DRIVE SYNC
+  // GOOGLE DRIVE SYNC
   // ==========================================================================
 
   if (event.certificate_drive_link) {
