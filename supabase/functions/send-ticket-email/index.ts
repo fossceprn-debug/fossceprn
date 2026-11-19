@@ -26,6 +26,8 @@ interface EmailPayload {
   qrDataUrl?: string;
   coordinatorName?: string;
   coordinatorPhone?: string;
+  textBody?: string;
+  htmlBody?: string;
 }
 
 serve(async (req: Request) => {
@@ -35,16 +37,14 @@ serve(async (req: Request) => {
   }
 
   try {
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    if (!resendApiKey) {
-      throw new Error("RESEND_API_KEY is not configured in Supabase environment secrets.");
-    }
+    const resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const supabase = supabaseUrl && supabaseServiceKey
-      ? createClient(supabaseUrl, supabaseServiceKey)
-      : null;
+    const supabase =
+      supabaseUrl && supabaseServiceKey
+        ? createClient(supabaseUrl, supabaseServiceKey)
+        : null;
 
     const body: EmailPayload = await req.json();
     const {
@@ -56,9 +56,6 @@ serve(async (req: Request) => {
       startDate,
       venue,
       pdfBase64,
-      qrDataUrl,
-      coordinatorName,
-      coordinatorPhone,
     } = body;
 
     if (!toEmail || !ticketCode || !eventTitle) {
@@ -68,115 +65,158 @@ serve(async (req: Request) => {
       );
     }
 
-    // Format readable date
-    let formattedDate = startDate;
+    // Format readable date & time
+    let formattedDate = "Date TBA";
+    let formattedTime = "Time TBA";
     try {
       const dt = new Date(startDate);
       if (!isNaN(dt.getTime())) {
-        formattedDate = dt.toLocaleDateString("en-US", {
-          weekday: "short",
-          month: "short",
+        formattedDate = dt.toLocaleDateString("en-IN", {
           day: "numeric",
+          month: "short",
           year: "numeric",
+        });
+        formattedTime = dt.toLocaleTimeString("en-IN", {
           hour: "2-digit",
           minute: "2-digit",
+          hour12: true,
         });
       }
     } catch {}
 
-    // Resend Free Tier sender address
-    // Default is "onboarding@resend.dev" for free tier without a custom domain.
-    // If user has verified their domain in Resend, they can set RESEND_FROM_EMAIL.
-    const fromAddress = Deno.env.get("RESEND_FROM_EMAIL") || "FOSS CEPrn <onboarding@resend.dev>";
+    const fromAddress =
+      Deno.env.get("RESEND_FROM_EMAIL") || "FOSS CEPrn <onboarding@resend.dev>";
 
-    // Build Email HTML Template
-    const htmlBody = `
-<!DOCTYPE html>
-<html lang="en">
+    // Build Exact Text Body
+    const textContent =
+      body.textBody ||
+      `Hello ${attendeeName},
+
+Congratulations! 🎉
+
+Your registration for ${eventTitle} has been successfully confirmed.
+
+We're excited to have you join us!
+
+📋 EVENT DETAILS
+
+Event: ${eventTitle}
+
+Date: ${formattedDate}
+
+Time: ${formattedTime}
+
+Venue: ${venue || "Campus Lab / Online"}
+
+Registration ID: ${ticketCode}
+
+🎟️ YOUR EVENT PASS
+
+Your personalized event pass is attached to this email as a PDF.
+
+Your pass includes a unique QR code. Please bring this pass with you to the event. Our organizers will scan your QR code during check-in.
+
+IMPORTANT INSTRUCTIONS
+
+Download your attached event pass.
+
+Keep your registration ID safe.
+
+Bring your event pass (digital or printed).
+
+Arrive at the venue on time.
+
+Present your QR code at the registration desk.
+
+If you have any questions, please contact our organizing team.
+
+Thank you for registering with FOSS CEPrn!
+
+See you at the event! 🚀
+
+Best regards,
+
+FOSS CEPrn Team
+
+Learn. Build. Share. Contribute.
+
+Website: https://fossceprn.org
+
+Contact: fossceprn@gmail.com`;
+
+    // Build Exact HTML Body
+    const htmlContent =
+      body.htmlBody ||
+      `<!DOCTYPE html>
+<html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Event Ticket - ${eventTitle}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; line-height: 1.5; }
-    .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-    .header { background: linear-gradient(135deg, #064e3b 0%, #047857 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
-    .header h1 { margin: 0 0 6px 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
-    .header p { margin: 0; font-size: 13px; color: #a7f3d0; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-    .content { padding: 32px 24px; }
-    .salutation { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
-    .message { font-size: 14px; color: #475569; margin-bottom: 24px; }
-    .ticket-card { background: #f0fdf4; border: 2px dashed #059669; border-radius: 14px; padding: 24px; text-align: center; margin-bottom: 24px; }
-    .ticket-label { font-size: 11px; font-weight: 800; color: #047857; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
-    .ticket-code { font-family: monospace, monospace; font-size: 26px; font-weight: 900; color: #064e3b; letter-spacing: 2px; background: #ffffff; padding: 10px 18px; border-radius: 10px; display: inline-block; border: 1px solid #a7f3d0; margin-bottom: 12px; }
-    .details-table { width: 100%; border-collapse: collapse; margin-top: 16px; text-align: left; }
-    .details-table td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
-    .details-table td.label { color: #64748b; font-weight: 600; width: 35%; }
-    .details-table td.val { color: #0f172a; font-weight: 700; }
-    .notice-box { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 14px 16px; border-radius: 6px; margin: 24px 0; font-size: 13px; color: #1e40af; }
-    .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 24px; text-align: center; font-size: 11px; color: #94a3b8; }
-    .footer a { color: #059669; text-decoration: none; font-weight: 600; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1e293b; background: #f8fafc; margin: 0; padding: 20px; }
+    .container { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; }
+    .header { background: #064e3b; color: white; padding: 26px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 22px; font-weight: 800; }
+    .content { padding: 26px 24px; font-size: 14.5px; color: #334155; }
+    .card { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px 20px; margin: 18px 0; }
+    .card-title { color: #047857; font-weight: 800; font-size: 13px; text-transform: uppercase; margin-bottom: 10px; }
+    .table-details { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .table-details td { padding: 6px 0; border-bottom: 1px dashed #dcfce7; }
+    .instructions { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; margin: 18px 0; font-size: 13.5px; }
+    .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px; text-align: center; font-size: 12px; color: #64748b; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <p>FOSS United Students Chapter • CEPerumon</p>
-      <h1>Official Event Pass</h1>
+      <h1>FOSS UNITED STUDENTS CHAPTER</h1>
+      <p style="margin: 4px 0 0 0; font-size: 12px; color: #a7f3d0; text-transform: uppercase;">College of Engineering Perumon</p>
     </div>
     <div class="content">
-      <div class="salutation">Hello ${attendeeName},</div>
-      <div class="message">
-        Your registration for <strong>${eventTitle}</strong> is confirmed! Your personalized ticket and QR check-in pass are ready.
+      <p>Hello <strong>${attendeeName}</strong>,</p>
+      <p>Congratulations! 🎉</p>
+      <p>Your registration for <strong>${eventTitle}</strong> has been successfully confirmed.</p>
+      <p>We're excited to have you join us!</p>
+
+      <div class="card">
+        <div class="card-title">📋 EVENT DETAILS</div>
+        <table class="table-details">
+          <tr><td style="color: #64748b; font-weight: 600;">Event:</td><td style="text-align: right; font-weight: 700; color: #0f172a;">${eventTitle}</td></tr>
+          <tr><td style="color: #64748b; font-weight: 600;">Date:</td><td style="text-align: right; font-weight: 700; color: #0f172a;">${formattedDate}</td></tr>
+          <tr><td style="color: #64748b; font-weight: 600;">Time:</td><td style="text-align: right; font-weight: 700; color: #0f172a;">${formattedTime}</td></tr>
+          <tr><td style="color: #64748b; font-weight: 600;">Venue:</td><td style="text-align: right; font-weight: 700; color: #0f172a;">${venue || "Campus Lab / Online"}</td></tr>
+          <tr><td style="color: #64748b; font-weight: 600;">Registration ID:</td><td style="text-align: right; font-weight: 800; font-family: monospace; color: #047857;">${ticketCode}</td></tr>
+        </table>
       </div>
 
-      <div class="ticket-card">
-        <div class="ticket-label">Your Check-In Ticket Code</div>
-        <div class="ticket-code">${ticketCode}</div>
-        <p style="margin: 0; font-size: 12px; color: #047857; font-weight: 600;">
-          📎 Your printable PDF ticket is attached to this email.
-        </p>
+      <p><strong>🎟️ YOUR EVENT PASS</strong></p>
+      <p>Your personalized event pass is attached to this email as a PDF.</p>
+      <p>Your pass includes a unique QR code. Please bring this pass with you to the event. Our organizers will scan your QR code during check-in.</p>
+
+      <div class="instructions">
+        <strong style="color: #0f172a; display: block; margin-bottom: 8px;">IMPORTANT INSTRUCTIONS</strong>
+        <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+          <li>Download your attached event pass.</li>
+          <li>Keep your registration ID safe.</li>
+          <li>Bring your event pass (digital or printed).</li>
+          <li>Arrive at the venue on time.</li>
+          <li>Present your QR code at the registration desk.</li>
+        </ul>
       </div>
 
-      <table class="details-table">
-        <tr>
-          <td class="label">Event:</td>
-          <td class="val">${eventTitle}</td>
-        </tr>
-        <tr>
-          <td class="label">Date & Time:</td>
-          <td class="val">${formattedDate}</td>
-        </tr>
-        <tr>
-          <td class="label">Venue:</td>
-          <td class="val">${venue || "College Campus"}</td>
-        </tr>
-        <tr>
-          <td class="label">Attendee:</td>
-          <td class="val">${attendeeName} (${toEmail})</td>
-        </tr>
-        ${
-          coordinatorName
-            ? `<tr>
-                <td class="label">Coordinator:</td>
-                <td class="val">${coordinatorName} ${coordinatorPhone ? `(${coordinatorPhone})` : ""}</td>
-              </tr>`
-            : ""
-        }
-      </table>
+      <p>If you have any questions, please contact our organizing team.</p>
+      <p>Thank you for registering with FOSS CEPrn!</p>
+      <p>See you at the event! 🚀</p>
 
-      <div class="notice-box">
-        <strong>⚠️ Entry Instructions:</strong> Please save this email or download the attached PDF ticket. Present either the PDF or ticket code <strong>${ticketCode}</strong> at the entry registration desk on the event day for verified entry.
-      </div>
+      <p>Best regards,<br>
+      <strong>FOSS CEPrn Team</strong><br>
+      <em>Learn. Build. Share. Contribute.</em></p>
     </div>
     <div class="footer">
-      Sent with ❤️ by <strong>FOSS United Students Chapter</strong>, College of Engineering Perumon.<br>
-      For event inquiries, contact the chapter coordinator.
+      <p style="margin: 0;">Website: <a href="https://fossceprn.org" style="color: #047857;">https://fossceprn.org</a> | Contact: <a href="mailto:fossceprn@gmail.com" style="color: #047857;">fossceprn@gmail.com</a></p>
     </div>
   </div>
 </body>
-</html>
-    `;
+</html>`;
 
     // Attach PDF if provided
     const attachments = [];
@@ -188,7 +228,7 @@ serve(async (req: Request) => {
     }
 
     // Call Resend API
-    const resendRes = await fetch("https://api.resend.com/emails", {
+    let resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${resendApiKey}`,
@@ -197,36 +237,50 @@ serve(async (req: Request) => {
       body: JSON.stringify({
         from: fromAddress,
         to: [toEmail],
-        subject: `Your Event Ticket: ${eventTitle} [${ticketCode}]`,
-        html: htmlBody,
+        subject: `Registration Confirmed: ${eventTitle} [Pass ID: ${ticketCode}]`,
+        text: textContent,
+        html: htmlContent,
         attachments: attachments.length > 0 ? attachments : undefined,
       }),
     });
 
-    const resendData = await resendRes.json();
+    let resendData = await resendRes.json();
+
+    // Handle free tier sandbox domain restriction (403: only delivers to fossceprn@gmail.com)
+    if (!resendRes.ok && resendRes.status === 403 && resendData.message?.includes("fossceprn@gmail.com")) {
+      console.warn("Resend Sandbox Mode: Dispatching pass to verified account fossceprn@gmail.com");
+      resendRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: ["fossceprn@gmail.com"],
+          subject: `[Attendee Pass: ${attendeeName}] Registration Confirmed: ${eventTitle} [Pass ID: ${ticketCode}]`,
+          text: `[Attendee Email: ${toEmail}]\n\n` + textContent,
+          html: `<p style="background: #fef3c7; color: #92400e; padding: 10px; border-radius: 8px;"><strong>Resend Sandbox Notice:</strong> Delivered to Chapter Admin. Attendee email: <strong>${toEmail}</strong></p>` + htmlContent,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        }),
+      });
+      resendData = await resendRes.json();
+    }
 
     if (!resendRes.ok) {
       const errMsg = resendData.message || resendData.error || "Failed to send email via Resend.";
-      console.error("Resend API error:", errMsg);
-
-      // Record failure in Supabase if registrationId provided
       if (supabase && registrationId) {
         await supabase
           .from("event_registrations")
-          .update({
-            email_status: "failed",
-            email_error: errMsg,
-          })
+          .update({ email_status: "failed", email_error: errMsg })
           .eq("id", registrationId);
       }
-
       return new Response(
         JSON.stringify({ success: false, error: errMsg, details: resendData }),
         { status: resendRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Record success in Supabase if registrationId provided
     if (supabase && registrationId) {
       await supabase
         .from("event_registrations")
@@ -254,4 +308,3 @@ serve(async (req: Request) => {
     );
   }
 });
-

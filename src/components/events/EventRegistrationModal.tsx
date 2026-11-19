@@ -314,7 +314,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={`${stage === "form" ? "max-w-xl" : "max-w-3xl"} p-0 overflow-hidden bg-white rounded-3xl border border-slate-200/80 shadow-2xl`}>
+      <DialogContent className={`${stage === "form" ? "max-w-xl" : "max-w-lg"} p-0 overflow-hidden bg-white rounded-3xl border border-slate-200/80 shadow-2xl`}>
         {stage === "form" ? (
           <div>
             {/* Modal Header */}
@@ -547,207 +547,214 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
               </div>
             </div>
 
-            {/* Ticket Card Pass matching the official template */}
+            {/* Portrait Invitation Pass matching the official template */}
             <div
               ref={ticketRef}
-              className="relative rounded-3xl bg-white border border-slate-200/90 shadow-xl overflow-hidden flex flex-col md:flex-row"
+              className="relative rounded-3xl bg-white border-2 shadow-2xl overflow-hidden max-w-md mx-auto flex flex-col p-6 sm:p-7 space-y-4"
+              style={{ borderColor: passTheme.borderTint }}
             >
-              {/* Left Main Body (~68% width on desktop) */}
-              <div className="flex-1 p-5 sm:p-6 relative flex flex-col justify-between overflow-hidden bg-white">
-                {/* Decorative background ribbons in bottom-left corner */}
-                <div
-                  className="absolute -bottom-16 -left-16 w-44 h-44 rounded-full pointer-events-none opacity-20 blur-xl"
-                  style={{ backgroundColor: passTheme.primary }}
-                />
-                <div
-                  className="absolute -bottom-10 -left-10 w-28 h-28 rounded-full pointer-events-none opacity-30"
-                  style={{ backgroundColor: passTheme.softTint }}
-                />
-
-                <div className="space-y-4 relative z-10">
-                  {/* Top Header: FOSS badge + Chapter Name */}
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="px-3.5 py-1.5 rounded-xl text-white font-black text-sm tracking-wider shadow-xs"
-                      style={{ backgroundColor: passTheme.primary }}
-                    >
-                      FOSS
-                    </div>
-                    <div className="h-8 w-px bg-slate-200" />
-                    <div className="space-y-0.5">
-                      <h5
-                        className="text-xs font-black uppercase tracking-wider leading-none"
-                        style={{ color: passTheme.primaryDark }}
-                      >
-                        FOSS UNITED STUDENTS CHAPTER
-                      </h5>
-                      <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase leading-none">
-                        COLLEGE OF ENGINEERING PERUMON
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Heading: INVITATION PASS & SUBTITLE */}
-                  <div className="text-center pt-1 pb-1">
-                    <h2
-                      className="text-2xl sm:text-3xl font-black tracking-tight"
-                      style={{ color: passTheme.primaryDark }}
-                    >
-                      INVITATION PASS
-                    </h2>
-                    <div className="flex items-center justify-center gap-3 mt-1 text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                      <div className="h-px w-10 sm:w-16" style={{ backgroundColor: passTheme.primaryDark }} />
-                      <span style={{ color: passTheme.primaryDark }}>FOR ATTENDING THE EVENT</span>
-                      <div className="h-px w-10 sm:w-16" style={{ backgroundColor: passTheme.primaryDark }} />
-                    </div>
-                    {/* Prominent Event Name */}
-                    <h3 className="text-base sm:text-lg font-black text-slate-900 mt-2 line-clamp-2">
-                      {event.title}
-                    </h3>
-                  </div>
-
-                  {/* Info Pill Box (Date/Time & Venue) */}
-                  <div
-                    className="rounded-2xl p-3 sm:p-3.5 border grid grid-cols-1 sm:grid-cols-2 gap-3 items-center"
-                    style={{ backgroundColor: passTheme.softTint, borderColor: passTheme.borderTint }}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: passTheme.primary + "18", color: passTheme.primaryDark }}
-                      >
-                        <Calendar className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold" style={{ color: passTheme.primaryDark }}>
-                          {formatDate(event.start_date)}
-                        </p>
-                        <p className="text-[11px] text-slate-500 font-medium">Event Schedule</p>
-                      </div>
-                    </div>
-
-                    <div
-                      className="flex items-center gap-2.5 border-t sm:border-t-0 sm:border-l pt-2 sm:pt-0 sm:pl-3"
-                      style={{ borderColor: passTheme.borderTint }}
-                    >
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: passTheme.primary + "18", color: passTheme.primaryDark }}
-                      >
-                        <MapPin className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold truncate max-w-[170px]" style={{ color: passTheme.primaryDark }}>
-                          {event.venue || "College Campus"}
-                        </p>
-                        <p className="text-[11px] text-slate-500 font-medium">Campus Lab / Online</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Attendee & Coordinator Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
-                    <div>
-                      <span
-                        className="text-[10px] font-extrabold uppercase tracking-wider block"
-                        style={{ color: passTheme.primary }}
-                      >
-                        REGISTERED ATTENDEE
-                      </span>
-                      <p className="font-extrabold text-slate-900 text-sm mt-0.5">
-                        {registration?.full_name}
-                      </p>
-                      <p className="text-[11px] text-slate-500 truncate">
-                        {registration?.class_semester || registration?.email}
-                      </p>
-                    </div>
-
-                    <div>
-                      <span
-                        className="text-[10px] font-extrabold uppercase tracking-wider block"
-                        style={{ color: passTheme.primary }}
-                      >
-                        EVENT COORDINATORS
-                      </span>
-                      <p className="font-bold text-slate-900 text-xs mt-0.5 truncate">
-                        {[event.coordinator1_name, event.coordinator2_name].filter(Boolean).join(" & ") ||
-                          event.coordinator_name ||
-                          "FOSS Chapter Coordinators"}
-                      </p>
-                      <p className="text-[11px] text-slate-500 truncate">
-                        {event.coordinator1_phone || event.coordinator2_phone || event.coordinator_phone
-                          ? `Ph: ${[event.coordinator1_phone, event.coordinator2_phone].filter(Boolean).join(" / ") || event.coordinator_phone}`
-                          : "FOSS CEPerumon Chapter"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Diamond ornament divider & Save warning */}
-                  <div className="pt-2 text-center space-y-1.5">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="h-px w-16" style={{ backgroundColor: passTheme.borderTint }} />
-                      <span className="text-xs" style={{ color: passTheme.primary }}>◆</span>
-                      <div className="h-px w-16" style={{ backgroundColor: passTheme.borderTint }} />
-                    </div>
-                    <p
-                      className="text-[11px] font-extrabold tracking-wide uppercase"
-                      style={{ color: passTheme.primaryDark }}
-                    >
-                      ⚠️ SAVE THIS QR PASS • DO NOT MISS IT • SHOW AT ENTRY DESK
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Ticket Cutout Notches / Divider on desktop */}
-              <div className="relative hidden md:flex flex-col items-center justify-between py-2 -mx-3 z-20">
-                <div className="w-6 h-6 rounded-full bg-slate-50 shadow-inner -mt-3" />
-                <div className="h-full border-r-2 border-dashed border-white/40 my-1" />
-                <div className="w-6 h-6 rounded-full bg-slate-50 shadow-inner -mb-3" />
-              </div>
-
-              {/* Right Ticket Stub (~32% width) */}
+              {/* Semicircular Ticket Cutout Notches on Left and Right */}
               <div
-                className="w-full md:w-64 p-5 sm:p-6 flex flex-col items-center justify-center text-center relative overflow-hidden"
-                style={{ background: passTheme.cssStubGradient }}
-              >
-                {/* Decorative ambient shine */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
+                className="absolute -left-3.5 top-[42%] w-7 h-7 rounded-full bg-slate-50 shadow-inner border border-slate-200/80 z-20 pointer-events-none"
+              />
+              <div
+                className="absolute -right-3.5 top-[42%] w-7 h-7 rounded-full bg-slate-50 shadow-inner border border-slate-200/80 z-20 pointer-events-none"
+              />
 
-                <div className="space-y-3 relative z-10 w-full flex flex-col items-center">
-                  {/* White Rounded QR Card */}
-                  <div className="bg-white p-2.5 rounded-2xl shadow-lg inline-block">
-                    {qrDataUrl ? (
-                      <img
-                        src={qrDataUrl}
-                        alt="Verified Check-in QR Code"
-                        className="w-36 h-36 object-contain rounded-lg"
-                      />
-                    ) : (
-                      <div className="w-36 h-36 flex items-center justify-center text-slate-400">
-                        <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
-                      </div>
-                    )}
-                  </div>
+              {/* Top Decorative Background Arc */}
+              <div
+                className="absolute -top-12 -left-12 w-36 h-36 rounded-full pointer-events-none opacity-25 blur-xl"
+                style={{ backgroundColor: passTheme.primary }}
+              />
 
-                  {/* Monospace Ticket Code Pill */}
-                  <div
-                    className="w-full max-w-[210px] py-1.5 px-3 rounded-full border-2 border-white/60 text-white font-mono text-sm sm:text-base font-black tracking-widest shadow-inner text-center"
-                    style={{ backgroundColor: passTheme.pillBg }}
+              {/* 1. Header Bar: FOSS Pill Badge + Chapter Subtitle */}
+              <div className="flex items-center gap-3 relative z-10">
+                <div
+                  className="px-3 py-1.5 rounded-xl text-white font-black text-sm tracking-wider shadow-sm"
+                  style={{ backgroundColor: passTheme.primary }}
+                >
+                  FOSS
+                </div>
+                <div className="h-8 w-px bg-slate-200" />
+                <div className="space-y-0.5">
+                  <h5
+                    className="text-xs font-black uppercase tracking-wider leading-none"
+                    style={{ color: passTheme.primary }}
                   >
-                    {registration?.ticket_code}
-                  </div>
+                    FOSS UNITED STUDENTS CHAPTER
+                  </h5>
+                  <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase leading-none">
+                    COLLEGE OF ENGINEERING PERUMON
+                  </p>
+                </div>
+              </div>
 
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] font-black uppercase tracking-wider text-white">
-                      SCAN FOR ENTRY CHECK-IN
+              {/* 2. INVITATION PASS & SUBTITLE */}
+              <div className="text-center pt-1 space-y-1 relative z-10">
+                <h2
+                  className="text-2xl sm:text-3xl font-black tracking-tight"
+                  style={{ color: passTheme.primaryDark }}
+                >
+                  INVITATION PASS
+                </h2>
+                <div className="flex items-center justify-center gap-2 text-[10px] font-extrabold uppercase tracking-widest">
+                  <div className="h-px w-10 sm:w-14" style={{ backgroundColor: passTheme.primary }} />
+                  <span style={{ color: passTheme.primary }}>FOR ATTENDING THE EVENT</span>
+                  <div className="h-px w-10 sm:w-14" style={{ backgroundColor: passTheme.primary }} />
+                </div>
+
+                {/* PARTICIPANT'S NAME IN A BIG WAY */}
+                <div className="pt-2">
+                  <span
+                    className="text-[10px] font-extrabold uppercase tracking-widest block"
+                    style={{ color: passTheme.primary }}
+                  >
+                    PARTICIPANT
+                  </span>
+                  <h3
+                    className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900 mt-0.5"
+                    style={{ color: passTheme.primaryDark }}
+                  >
+                    {registration?.full_name}
+                  </h3>
+                  <p className="text-base font-bold text-slate-700 mt-0.5">
+                    {event.title}
+                  </p>
+                </div>
+              </div>
+
+              {/* 3. Date & Venue 2-Column Pill Box */}
+              <div
+                className="rounded-2xl p-3 border grid grid-cols-2 gap-2 items-center relative z-10"
+                style={{ backgroundColor: passTheme.softTint, borderColor: passTheme.borderTint }}
+              >
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: passTheme.primary + "20", color: passTheme.primary }}
+                  >
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold leading-tight" style={{ color: passTheme.primaryDark }}>
+                      {formatDate(event.start_date).split(",")[0]}
                     </p>
-                    <p className="text-[9px] font-medium tracking-wide text-white/70">
-                      FOSS UNITED CEPRN
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      {formatDate(event.start_date).split(",")[1] || "Starts on schedule"}
                     </p>
                   </div>
                 </div>
+
+                <div
+                  className="flex items-center gap-2 border-l pl-2"
+                  style={{ borderColor: passTheme.borderTint }}
+                >
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: passTheme.primary + "20", color: passTheme.primary }}
+                  >
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold truncate max-w-[120px] leading-tight" style={{ color: passTheme.primaryDark }}>
+                      {event.venue || "College Campus"}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-medium">Campus Lab / Online</p>
+                  </div>
+                </div>
               </div>
+
+              {/* 4. Center QR Code with Flanking Diamond Rules */}
+              <div className="flex items-center justify-center gap-3 py-1 relative z-10">
+                {/* Left vertical rule */}
+                <div className="hidden sm:flex flex-col items-center gap-10">
+                  <div className="w-px h-16" style={{ backgroundColor: passTheme.primary }} />
+                  <div className="w-2 h-2 rotate-45" style={{ backgroundColor: passTheme.primary }} />
+                  <div className="w-px h-16" style={{ backgroundColor: passTheme.primary }} />
+                </div>
+
+                {/* QR Code Container */}
+                <div
+                  className="relative p-3 rounded-2xl bg-white border-2 shadow-md flex items-center justify-center"
+                  style={{ borderColor: passTheme.primary }}
+                >
+                  {qrDataUrl ? (
+                    <img
+                      src={qrDataUrl}
+                      alt="Verified Entry QR"
+                      className="w-44 h-44 object-contain rounded-xl"
+                    />
+                  ) : (
+                    <div className="w-44 h-44 flex items-center justify-center text-slate-400">
+                      <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+                    </div>
+                  )}
+
+                  {/* Center Badge inside QR */}
+                  <div
+                    className="absolute px-2.5 py-0.5 rounded-md text-white text-[10px] font-black uppercase tracking-wider shadow-sm border border-white"
+                    style={{ backgroundColor: passTheme.primary }}
+                  >
+                    FOSS
+                  </div>
+                </div>
+
+                {/* Right vertical rule */}
+                <div className="hidden sm:flex flex-col items-center gap-10">
+                  <div className="w-px h-16" style={{ backgroundColor: passTheme.primary }} />
+                  <div className="w-2 h-2 rotate-45" style={{ backgroundColor: passTheme.primary }} />
+                  <div className="w-px h-16" style={{ backgroundColor: passTheme.primary }} />
+                </div>
+              </div>
+
+              {/* 5. Solid Theme-Colored Ticket Code Pill */}
+              <div className="text-center space-y-1 relative z-10">
+                <div
+                  className="inline-block px-8 py-2 rounded-full text-white font-mono text-base font-black tracking-widest shadow-md"
+                  style={{ backgroundColor: passTheme.primaryDark }}
+                >
+                  {registration?.ticket_code}
+                </div>
+                <p
+                  className="text-[10px] font-extrabold uppercase tracking-widest block pt-0.5"
+                  style={{ color: passTheme.primary }}
+                >
+                  SCAN FOR ENTRY CHECK-IN
+                </p>
+              </div>
+
+              {/* 6. Event Coordinator Contact Pill Card */}
+              <div
+                className="rounded-2xl p-2.5 bg-slate-50 border flex items-center gap-3 relative z-10"
+                style={{ borderColor: passTheme.borderTint }}
+              >
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0 shadow-xs"
+                  style={{ backgroundColor: passTheme.primary }}
+                >
+                  <User className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase leading-none">
+                    Event Coordinator
+                  </p>
+                  <p className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                    {[event.coordinator1_name, event.coordinator2_name].filter(Boolean).join(" & ") ||
+                      event.coordinator_name ||
+                      "FOSS Chapter Coordinator"}
+                    {" "}
+                    <span className="text-[11px] font-semibold text-slate-600">
+                      {event.coordinator1_phone || event.coordinator2_phone || event.coordinator_phone || "+91 9895461970"}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              {/* 7. Bottom Decorative Ribbon Waves */}
+              <div
+                className="absolute -bottom-8 -left-8 -right-8 h-20 pointer-events-none opacity-20 rounded-full blur-sm"
+                style={{ backgroundColor: passTheme.primary }}
+              />
             </div>
 
             {/* Action Buttons */}

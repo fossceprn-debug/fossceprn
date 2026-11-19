@@ -1,27 +1,25 @@
 // ============================================================================
-// Certificate Generator for Attended Participants
-// FOSS United Students Chapter • College of Engineering Perumon
+// Official FOSS CEPrn Certificate of Appreciation / Participation
+// Generated from Authentic Master Reference (Preserving exact 4 Signatures & Logos)
 //
-// Strict requirements:
-// 1. Only generates certificates for attended students (checked_in === true).
-// 2. Uses the authentic sample certificate template:
-//    - Preserves College crest & FOSS CEPRN logo.
-//    - Preserves the exact 4 leadership signatures, names, and designations:
-//      * Ms. ABIYA DANIEL — COMMUNITY LEAD
-//      * Ms. ANJU VENUGOPAL — FACULTY COORDINATOR
-//      * Ms. SHAFEENA M B — FACULTY COORDINATOR
-//      * Dr BEJOY ABRAHAM — PRINCIPAL
-//    - Preserves all authentic corner geometric designs.
-// 3. Dynamically overlays:
-//    - Student's Full Name (prominently centered in bold).
-//    - Dynamic Event Title & Event Date.
-//    - Verified Security QR Code that opens /verify-certificate?id=...&name=...&email=...
-//      showing VALID status, student name, Gmail ID, event date, and attendance proof.
+// Strict Standards:
+// 1. Preserves exact College of Engineering Perumon Crest & FOSS CEPRN Logo.
+// 2. Preserves authentic official headers & corner geometric ornaments.
+// 3. Preserves ALL 4 AUTHENTIC LEADERSHIP SIGNATURES, names, and designations:
+//    * Ms. ABIYA DANIEL — COMMUNITY LEAD
+//    * Ms. ANJU VENUGOPAL — FACULTY COORDINATOR
+//    * Ms. SHAFEENA M B — FACULTY COORDINATOR
+//    * Dr BEJOY ABRAHAM — PRINCIPAL
+// 4. Dynamic fields:
+//    - Participant Full Name (prominently centered in bold uppercase).
+//    - Event Title (bold emerald).
+//    - Event Date ONLY (e.g. "19 November 2026") — STRICTLY NO TIME.
+//    - Symmetrical, centered institutional verification QR seal.
+// 5. High-resolution output (3392 x 2631 canvas, 300 DPI retina clarity).
 // ============================================================================
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
-import { formatDate } from "./utils";
 import type { EventItem, EventRegistration } from "@/types";
 
 export interface CertificateOptions {
@@ -37,7 +35,25 @@ export interface GeneratedCertificate {
 }
 
 /**
- * Generates an official event participation certificate for an attended participant.
+ * Format date for certificate presentation (e.g. "19 November 2026") — strictly NO TIME.
+ */
+export function formatCertificateDate(dateString: string | null | undefined): string {
+  if (!dateString) return "Date TBA";
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return dateString;
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(d);
+  } catch {
+    return dateString;
+  }
+}
+
+/**
+ * Generates an official event participation/appreciation certificate for an attended participant.
  * STRICT: Throws if attendee is not checked in.
  */
 export async function generateAttendeeCertificate(
@@ -55,33 +71,38 @@ export async function generateAttendeeCertificate(
     attendee.certificate_id ||
     `CEPRN-CERT-${(attendee.ticket_code || attendee.id.substring(0, 8)).toUpperCase()}`;
 
-  // Canvas resolution: 2048 x 1446 (2x of sample 1024 x 723, ~1.416 aspect ratio matching A4 landscape)
-  const width = 2048;
-  const height = 1446;
+  // Canvas resolution: 3392 x 2631 (matching high-res reference master template)
+  const width = 3392;
+  const height = 2631;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not acquire canvas 2D context");
 
-  // Determine template URL (Coordinator custom URL or default official sample)
-  const templateUrl = event.certificate_template_url || "/templates/certificate-sample.jpg";
+  // Determine template URL (Coordinator custom URL or default official master)
+  const templateUrl =
+    event.certificate_template_url || "/templates/certificate-master.png";
 
   // Build the live verification URL embedded in the QR Code
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://fossceprn.org";
+  const baseUrl =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "https://fossceprn.org";
+  const certDateParam = formatCertificateDate(event.start_date || new Date().toISOString());
   const verifyUrl = `${baseUrl}/verify-certificate?id=${encodeURIComponent(
     certId
   )}&name=${encodeURIComponent(attendee.full_name)}&email=${encodeURIComponent(
     attendee.email
   )}&event=${encodeURIComponent(event.title)}&date=${encodeURIComponent(
-    event.start_date || new Date().toISOString()
+    certDateParam
   )}&status=VALID`;
 
   // Generate the Verification QR Code as high-res DataURL
   let qrDataUrl = "";
   try {
     qrDataUrl = await QRCode.toDataURL(verifyUrl, {
-      width: 320,
+      width: 400,
       margin: 1,
       color: {
         dark: "#064e3b", // Deep emerald
@@ -101,101 +122,121 @@ export async function generateAttendeeCertificate(
   const imageLoaded = await new Promise<boolean>((resolve) => {
     bgImg.onload = () => resolve(true);
     bgImg.onerror = () => {
-      console.warn(`Could not load template from ${templateUrl}, using vector fallback.`);
-      resolve(false);
+      // Try fallback sample if master is not reachable
+      if (!templateUrl.includes("certificate-sample.jpg")) {
+        bgImg.src = "/templates/certificate-sample.jpg";
+      } else {
+        resolve(false);
+      }
     };
   });
 
   if (imageLoaded && bgImg.naturalWidth) {
     // ------------------------------------------------------------------------
-    // CASE A: Render on top of authentic Sample Certificate
+    // CASE A: Render on top of the authentic Master Certificate Template
     // ------------------------------------------------------------------------
     ctx.drawImage(bgImg, 0, 0, width, height);
 
-    // If using the official sample template (/templates/certificate-sample.jpg),
-    // we clear the central content area (previous name "SWAPNA SUNIL" and old event text)
-    // while strictly leaving the top logos/header and bottom 4 signatures 100% untouched.
-    const isOfficialSample =
-      templateUrl.includes("certificate-sample.jpg") || !event.certificate_template_url;
+    const isOfficialTemplate =
+      templateUrl.includes("certificate-master.png") ||
+      templateUrl.includes("certificate-sample.jpg") ||
+      !event.certificate_template_url;
 
-    if (isOfficialSample) {
-      // Clear out the center (x: 200 to 1848, y: 580 to 1020)
+    if (isOfficialTemplate) {
+      const cx = width / 2; // 1696
+
+      // 1. Cleanly clear the dynamic central region
+      // (Leaves top headers/logos y < 1000 and bottom 4 signatures y > 1860 100% untouched)
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(200, 580, 1648, 440);
+      ctx.fillRect(350, 1030, 2692, 800);
 
-      // 1. Participant Full Name (prominently centered in bold)
+      // 2. Participant Full Name (prominently centered, bold, elegant uppercase)
       ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillStyle = "#0f172a";
-      ctx.font = "bold 64px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-      ctx.fillText(attendee.full_name.toUpperCase(), 1024, 670);
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#0f172a"; // Deep Slate / Charcoal
 
-      // Subtle underline for elegance
-      const nameWidth = Math.min(ctx.measureText(attendee.full_name.toUpperCase()).width, 900);
-      ctx.strokeStyle = "#10b981";
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(1024 - nameWidth / 2 - 20, 690);
-      ctx.lineTo(1024 + nameWidth / 2 + 20, 690);
-      ctx.stroke();
+      const attendeeName = attendee.full_name.trim().toUpperCase();
+      let nameFontSize = 84;
+      if (attendeeName.length > 28) nameFontSize = 66;
+      else if (attendeeName.length > 22) nameFontSize = 74;
 
-      // 2. Dynamic Event Body Description
+      ctx.font = `bold ${nameFontSize}px 'Montserrat', 'Helvetica Neue', Arial, sans-serif`;
+      ctx.fillText(attendeeName, cx, 1170);
+
+      // 3. Body Text (Flowing institutional typography — STRICTLY NO TIME)
       ctx.fillStyle = "#334155";
-      ctx.font = "500 24px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-      ctx.fillText("in recognition of their active participation in the", 1024, 755);
+      ctx.font =
+        "500 36px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      ctx.fillText(
+        "in recognition of their active participation in the",
+        cx,
+        1310
+      );
 
       // Event Title (Bold Emerald)
-      ctx.font = "bold 34px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-      ctx.fillStyle = "#047857";
-      ctx.fillText(event.title, 1024, 805);
+      let titleFontSize = 46;
+      if (event.title.length > 40) titleFontSize = 38;
+      else if (event.title.length > 30) titleFontSize = 42;
 
-      // Organization & Date Line
-      ctx.font = "500 23px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      ctx.font = `bold ${titleFontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+      ctx.fillStyle = "#047857";
+      ctx.fillText(event.title, cx, 1375);
+
+      // Organization & Date (NO TIME)
+      ctx.font =
+        "500 34px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
       ctx.fillStyle = "#475569";
-      const formattedDate = formatDate(event.start_date || new Date().toISOString());
+      const formattedDate = formatCertificateDate(
+        event.start_date || new Date().toISOString()
+      );
+
       ctx.fillText(
         `organized by the Free and open source software club CEPRN, conducted on ${formattedDate},`,
-        1024,
-        855
+        cx,
+        1435
       );
 
       ctx.fillText(
-        "in appreciation of their dedication, creativity and contribution towards the community.",
-        1024,
-        895
+        "in appreciation of their creativity and contribution towards shaping the visual identity of the community.",
+        cx,
+        1495
       );
 
-      // 3. Official Verification QR Seal (Right Side Box: x: 1640, y: 620)
+      // 4. Centered Symmetrical Verification Seal & QR Code (y: 1570 to 1820)
       if (qrDataUrl) {
-        await drawQrBadge(ctx, qrDataUrl, certId, 1630, 620, 230, 280);
+        await drawCenteredVerificationSeal(ctx, qrDataUrl, certId, cx, 1565);
       }
     } else {
-      // Coordinator uploaded a custom template
+      // Custom Coordinator-Uploaded Template
+      const cx = width / 2;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#0f172a";
-      ctx.font = "bold 60px 'Times New Roman', Georgia, serif";
-      ctx.fillText(attendee.full_name, width / 2, height * 0.52);
+      ctx.font = "bold 80px 'Times New Roman', Georgia, serif";
+      ctx.fillText(attendee.full_name, cx, height * 0.52);
 
-      ctx.font = "italic 32px system-ui, -apple-system, sans-serif";
+      ctx.font = "italic 44px system-ui, -apple-system, sans-serif";
       ctx.fillStyle = "#047857";
-      ctx.fillText(event.title, width / 2, height * 0.62);
+      ctx.fillText(event.title, cx, height * 0.62);
 
-      ctx.font = "600 22px system-ui, -apple-system, sans-serif";
+      ctx.font = "600 32px system-ui, -apple-system, sans-serif";
       ctx.fillStyle = "#475569";
+      const formattedDate = formatCertificateDate(
+        event.start_date || new Date().toISOString()
+      );
       ctx.fillText(
-        `Held on ${formatDate(event.start_date || new Date().toISOString())} • Certificate ID: ${certId}`,
-        width / 2,
+        `Conducted on ${formattedDate} • Certificate ID: ${certId}`,
+        cx,
         height * 0.7
       );
 
       if (qrDataUrl) {
-        await drawQrBadge(ctx, qrDataUrl, certId, width - 260, height - 320, 200, 240);
+        await drawCenteredVerificationSeal(ctx, qrDataUrl, certId, cx, height * 0.77);
       }
     }
   } else {
     // ------------------------------------------------------------------------
-    // CASE B: Full Vector Rendering with the Exact 4 Signatures and Logos
+    // CASE B: Full High-End Vector Certificate Fallback
     // ------------------------------------------------------------------------
     await drawFallbackOfficialCertificate(
       ctx,
@@ -210,7 +251,7 @@ export async function generateAttendeeCertificate(
 
   const pngDataUrl = canvas.toDataURL("image/png");
 
-  // Create A4 Landscape PDF using jsPDF
+  // Create A4 Landscape PDF using jsPDF (297mm x 210mm)
   const doc = new jsPDF({
     orientation: "landscape",
     unit: "mm",
@@ -231,70 +272,91 @@ export async function generateAttendeeCertificate(
 }
 
 /**
- * Draws the elegant security verification badge box containing the QR code.
+ * Draws the elegant, symmetrical verification seal centered horizontally.
  */
-async function drawQrBadge(
+async function drawCenteredVerificationSeal(
   ctx: CanvasRenderingContext2D,
   qrDataUrl: string,
   certId: string,
-  x: number,
-  y: number,
-  w: number,
-  h: number
+  cx: number,
+  startY: number
 ) {
-  // Container Card
+  const qrSize = 136;
+  const qrX = cx - qrSize / 2;
+  const qrY = startY + 10;
+
+  // Flanking decorative lines
+  const lineY = qrY + qrSize / 2;
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 2;
+
+  // Left line with diamond
+  ctx.beginPath();
+  ctx.moveTo(cx - 520, lineY);
+  ctx.lineTo(cx - 105, lineY);
+  ctx.stroke();
+
+  ctx.fillStyle = "#10b981";
+  drawDiamond(ctx, cx - 105, lineY, 6);
+
+  // Right line with diamond
+  ctx.beginPath();
+  ctx.moveTo(cx + 105, lineY);
+  ctx.lineTo(cx + 520, lineY);
+  ctx.stroke();
+
+  drawDiamond(ctx, cx + 105, lineY, 6);
+
+  // QR Container Box
   ctx.save();
   ctx.fillStyle = "#ffffff";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
-  ctx.shadowBlur = 12;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 4;
-  ctx.beginPath();
-  roundRect(ctx, x, y, w, h, 14);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.06)";
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 3;
+  roundRect(ctx, qrX - 8, qrY - 8, qrSize + 16, qrSize + 16, 12);
   ctx.fill();
   ctx.restore();
 
-  // Emerald Border
+  // Thin emerald border
   ctx.strokeStyle = "#10b981";
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  roundRect(ctx, x, y, w, h, 14);
+  roundRect(ctx, qrX - 8, qrY - 8, qrSize + 16, qrSize + 16, 12);
   ctx.stroke();
 
-  // Header pill: "VERIFICATION SEAL"
-  ctx.fillStyle = "#047857";
-  ctx.fillRect(x + 12, y + 10, w - 24, 24);
-  ctx.fillStyle = "#ffffff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
-  ctx.fillText("✓ VERIFIED RECORD", x + w / 2, y + 22);
-
-  // QR Code Image
+  // QR Image
   const qrImg = new Image();
   qrImg.src = qrDataUrl;
   await new Promise((res) => {
     qrImg.onload = () => res(true);
     qrImg.onerror = () => res(false);
   });
-
-  const qrSize = Math.min(w - 40, h - 110);
-  const qrX = x + (w - qrSize) / 2;
-  const qrY = y + 42;
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
-  // Footer text
-  ctx.fillStyle = "#064e3b";
-  ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
-  ctx.fillText("SCAN TO VERIFY", x + w / 2, qrY + qrSize + 16);
+  // Under-QR verification label
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#047857";
+  ctx.font = "bold 16px system-ui, -apple-system, sans-serif";
+  ctx.fillText("✓ SCAN TO VERIFY CERTIFICATE", cx, qrY + qrSize + 25);
 
   ctx.fillStyle = "#64748b";
-  ctx.font = "600 10px monospace";
-  ctx.fillText(certId.length > 20 ? certId.substring(0, 20) : certId, x + w / 2, qrY + qrSize + 32);
+  ctx.font = "600 14px monospace";
+  ctx.fillText(certId, cx, qrY + qrSize + 45);
+}
 
-  ctx.fillStyle = "#10b981";
-  ctx.font = "bold 10px system-ui, -apple-system, sans-serif";
-  ctx.fillText("STATUS: VALID", x + w / 2, qrY + qrSize + 48);
+function drawDiamond(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.lineTo(x + r, y);
+  ctx.lineTo(x, y + r);
+  ctx.lineTo(x - r, y);
+  ctx.closePath();
+  ctx.fill();
 }
 
 /**
@@ -309,103 +371,80 @@ async function drawFallbackOfficialCertificate(
   certId: string,
   qrDataUrl: string
 ) {
-  // White Canvas Background
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
-  // Outer Decorative Borders
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = "#064e3b"; // Deep Emerald
-  ctx.strokeRect(36, 36, width - 72, height - 72);
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = "#064e3b";
+  ctx.strokeRect(50, 50, width - 100, height - 100);
 
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "#10b981"; // Emerald accent
-  ctx.strokeRect(52, 52, width - 104, height - 104);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#10b981";
+  ctx.strokeRect(74, 74, width - 148, height - 148);
 
-  // Header Title
   const cx = width / 2;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
 
   ctx.fillStyle = "#064e3b";
-  ctx.font = "800 28px system-ui, -apple-system, sans-serif";
-  ctx.fillText("FREE AND OPEN SOURCE SOFTWARE CLUB", cx, 140);
+  ctx.font = "800 40px system-ui, -apple-system, sans-serif";
+  ctx.fillText("FREE AND OPEN SOURCE SOFTWARE CLUB", cx, 200);
 
   ctx.fillStyle = "#047857";
-  ctx.font = "700 20px system-ui, -apple-system, sans-serif";
-  ctx.fillText("FOSSCEPRN  |  COLLEGE OF ENGINEERING PERUMON", cx, 175);
+  ctx.font = "700 28px system-ui, -apple-system, sans-serif";
+  ctx.fillText("FOSSCEPRN  |  COLLEGE OF ENGINEERING PERUMON", cx, 250);
 
-  // Green separator
   ctx.strokeStyle = "#10b981";
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(cx - 300, 205);
-  ctx.lineTo(cx + 300, 205);
+  ctx.moveTo(cx - 400, 290);
+  ctx.lineTo(cx + 400, 290);
   ctx.stroke();
 
-  // "CERTIFICATE OF PARTICIPATION"
   ctx.fillStyle = "#047857";
-  ctx.font = "900 52px system-ui, -apple-system, sans-serif";
-  ctx.fillText("CERTIFICATE OF PARTICIPATION", cx, 290);
+  ctx.font = "900 70px system-ui, -apple-system, sans-serif";
+  ctx.fillText("CERTIFICATE OF APPRECIATION", cx, 410);
 
-  // "This certificate is proudly awarded to"
   ctx.fillStyle = "#64748b";
-  ctx.font = "600 22px system-ui, -apple-system, sans-serif";
-  ctx.fillText("This certificate is proudly awarded to", cx, 360);
+  ctx.font = "600 32px system-ui, -apple-system, sans-serif";
+  ctx.fillText("This certificate is proudly awarded to", cx, 510);
 
-  // Attendee Name
   ctx.fillStyle = "#0f172a";
-  ctx.font = "bold 64px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-  ctx.fillText(attendee.full_name.toUpperCase(), cx, 460);
+  ctx.font =
+    "bold 86px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  ctx.fillText(attendee.full_name.toUpperCase(), cx, 660);
 
-  // Underline
-  const nameW = ctx.measureText(attendee.full_name.toUpperCase()).width;
-  ctx.strokeStyle = "#10b981";
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(cx - nameW / 2 - 25, 480);
-  ctx.lineTo(cx + nameW / 2 + 25, 480);
-  ctx.stroke();
-
-  // Body Description
   ctx.fillStyle = "#334155";
-  ctx.font = "500 24px system-ui, -apple-system, sans-serif";
-  ctx.fillText("in recognition of their active participation in the", cx, 550);
+  ctx.font = "500 34px system-ui, -apple-system, sans-serif";
+  ctx.fillText("in recognition of their active participation in the", cx, 790);
 
-  // Event Name
   ctx.fillStyle = "#047857";
-  ctx.font = "bold 36px system-ui, -apple-system, sans-serif";
-  ctx.fillText(event.title, cx, 605);
+  ctx.font = "bold 48px system-ui, -apple-system, sans-serif";
+  ctx.fillText(event.title, cx, 870);
 
-  // Date and College details
   ctx.fillStyle = "#475569";
-  ctx.font = "500 22px system-ui, -apple-system, sans-serif";
-  const formattedDate = formatDate(event.start_date || new Date().toISOString());
+  ctx.font = "500 32px system-ui, -apple-system, sans-serif";
+  const formattedDate = formatCertificateDate(
+    event.start_date || new Date().toISOString()
+  );
   ctx.fillText(
     `organized by the Free and open source software club CEPRN, conducted on ${formattedDate},`,
     cx,
-    655
+    940
   );
   ctx.fillText(
     "in appreciation of their creativity and contribution towards shaping the visual identity of the community.",
     cx,
-    695
+    995
   );
 
-  // Verification QR Badge on Right
   if (qrDataUrl) {
-    await drawQrBadge(ctx, qrDataUrl, certId, width - 290, 480, 220, 270);
+    await drawCenteredVerificationSeal(ctx, qrDataUrl, certId, cx, 1070);
   }
 
-  // --------------------------------------------------------------------------
-  // EXACT 4 LEADERSHIP SIGNATURES:
-  // 1. Ms. ABIYA DANIEL — COMMUNITY LEAD
-  // 2. Ms. ANJU VENUGOPAL — FACULTY COORDINATOR
-  // 3. Ms. SHAFEENA M B — FACULTY COORDINATOR
-  // 4. Dr BEJOY ABRAHAM — PRINCIPAL
-  // --------------------------------------------------------------------------
-  const sigY = height - 240;
-  const colWidth = (width - 240) / 4;
+  // EXACT 4 LEADERSHIP SIGNATURES
+  const sigY = height - 360;
+  const colWidth = (width - 400) / 4;
 
   const signatories = [
     { name: "Ms. ABIYA DANIEL", role: "COMMUNITY LEAD" },
@@ -415,43 +454,31 @@ async function drawFallbackOfficialCertificate(
   ];
 
   signatories.forEach((sig, idx) => {
-    const colX = 120 + idx * colWidth + colWidth / 2;
+    const colX = 200 + idx * colWidth + colWidth / 2;
 
-    // Stylized signature simulation line
     ctx.strokeStyle = "#475569";
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
-    ctx.moveTo(colX - 110, sigY);
-    ctx.lineTo(colX + 110, sigY);
+    ctx.moveTo(colX - 160, sigY);
+    ctx.lineTo(colX + 160, sigY);
     ctx.stroke();
 
-    // Handwritten cursive approximation
-    ctx.font = "italic bold 22px 'Brush Script MT', 'Segoe Script', cursive, sans-serif";
-    ctx.fillStyle = "#1e293b";
-    ctx.fillText(sig.name.split(" ")[1] || sig.name, colX, sigY - 20);
-
-    // Official Printed Name
-    ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
+    ctx.font = "bold 28px system-ui, -apple-system, sans-serif";
     ctx.fillStyle = "#0f172a";
-    ctx.fillText(sig.name, colX, sigY + 36);
+    ctx.fillText(sig.name, colX, sigY + 50);
 
-    // Official Role Title
-    ctx.font = "700 14px system-ui, -apple-system, sans-serif";
+    ctx.font = "700 20px system-ui, -apple-system, sans-serif";
     ctx.fillStyle = "#64748b";
-    ctx.fillText(sig.role, colX, sigY + 62);
+    ctx.fillText(sig.role, colX, sigY + 86);
   });
 
-  // Certificate ID & Security Watermark Footer
   ctx.textAlign = "left";
-  ctx.font = "600 14px monospace";
+  ctx.font = "600 20px monospace";
   ctx.fillStyle = "#94a3b8";
-  ctx.fillText(`Certificate ID: ${certId}`, 70, height - 70);
-  ctx.fillText(`Recipient Gmail/Email: ${attendee.email}`, 70, height - 50);
+  ctx.fillText(`Certificate ID: ${certId}`, 100, height - 90);
+  ctx.fillText(`Recipient Gmail: ${attendee.email}`, 100, height - 60);
 }
 
-/**
- * Utility to draw rounded rectangles on standard canvas.
- */
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
