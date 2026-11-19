@@ -6,10 +6,10 @@
 // 1. Portrait orientation (width: 720, height: 1100).
 // 2. Dynamic event theme colors: Each event gets a distinct, vibrant palette.
 // 3. Prominently displays Participant's Name in a big, bold way.
-// 4. Ticket notch cutouts on left and right borders.
+// 4. Ticket notch cutouts on left and right borders with dashed perforation line.
 // 5. Scannable QR Code with center FOSS badge & vertical diamond accent rules.
-// 6. Solid theme-colored ticket code pill & Event Coordinator contact card.
-// 7. Generates ultra-crisp high-res PNG & Portrait PDF ticket.
+// 6. Solid theme-colored ticket code pill & Registered Attendee / Coordinator cards.
+// 7. Generates ultra-crisp high-res PNG & Portrait PDF ticket (A4 centered).
 // ============================================================================
 
 import { formatDate } from "./utils";
@@ -267,7 +267,7 @@ function createPortraitTicketPath(
 }
 
 /**
- * Generates an ultra-crisp high-resolution portrait invitation pass PNG matching the official sample image.
+ * Generates an ultra-crisp high-resolution portrait invitation pass PNG matching the official Perumon Chapter design.
  * Canvas resolution: 720 x 1100 px.
  */
 export async function generateInvitationPassImage(
@@ -276,8 +276,8 @@ export async function generateInvitationPassImage(
   const width = 720;
   const height = 1100;
   const cornerR = 34;
-  const notchY = 445; // Vertical position of the side ticket notches
-  const notchR = 20;
+  const notchY = 410; // Perforation line boundary separating upper pass info from lower QR ticket stub
+  const notchR = 18;
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -401,26 +401,26 @@ export async function generateInvitationPassImage(
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = theme.primaryDark;
-  ctx.font = "900 44px system-ui, -apple-system, sans-serif";
-  ctx.fillText("INVITATION PASS", cx, 155);
+  ctx.font = "900 42px system-ui, -apple-system, sans-serif";
+  ctx.fillText("INVITATION PASS", cx, 145);
 
   // Subtitle with flanking lines
   ctx.strokeStyle = theme.primary;
   ctx.lineWidth = 1.6;
 
   ctx.beginPath();
-  ctx.moveTo(cx - 240, 180);
-  ctx.lineTo(cx - 130, 180);
+  ctx.moveTo(cx - 240, 168);
+  ctx.lineTo(cx - 130, 168);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(cx + 130, 180);
-  ctx.lineTo(cx + 240, 180);
+  ctx.moveTo(cx + 130, 168);
+  ctx.lineTo(cx + 240, 168);
   ctx.stroke();
 
   ctx.fillStyle = theme.primary;
   ctx.font = "800 13px system-ui, -apple-system, sans-serif";
-  ctx.fillText("FOR ATTENDING THE EVENT", cx, 184);
+  ctx.fillText("FOR ATTENDING THE EVENT", cx, 172);
 
   // 7. PARTICIPANT NAME IN A BIG WAY (Prominent, Bold, Uppercase)
   ctx.textAlign = "center";
@@ -433,7 +433,7 @@ export async function generateInvitationPassImage(
   else if (attendeeName.length > 18) nameSize = 31;
 
   ctx.font = `900 ${nameSize}px system-ui, -apple-system, sans-serif`;
-  ctx.fillText(attendeeName, cx, 226);
+  ctx.fillText(attendeeName, cx, 212);
 
   // Event Name
   ctx.fillStyle = "#1e293b";
@@ -441,16 +441,16 @@ export async function generateInvitationPassImage(
   let titleSize = 22;
   if (eventTitle.length > 32) titleSize = 18;
   ctx.font = `bold ${titleSize}px system-ui, -apple-system, sans-serif`;
-  ctx.fillText(eventTitle, cx, 258);
+  ctx.fillText(eventTitle, cx, 242);
 
   // 8. Date & Venue 2-Column Rounded Pill Box
-  const pillBoxY = 280;
+  const pillBoxY = 262;
   const pillBoxW = width - 108;
-  const pillBoxH = 68;
+  const pillBoxH = 64;
   const pillBoxX = 54;
 
   ctx.fillStyle = theme.softTint;
-  roundRect(ctx, pillBoxX, pillBoxY, pillBoxW, pillBoxH, 18);
+  roundRect(ctx, pillBoxX, pillBoxY, pillBoxW, pillBoxH, 16);
   ctx.fill();
 
   ctx.strokeStyle = theme.borderTint;
@@ -465,7 +465,7 @@ export async function generateInvitationPassImage(
   ctx.stroke();
 
   // Left Column: Date & Time
-  drawCalendarIcon(ctx, pillBoxX + 18, pillBoxY + 18, theme.primary);
+  drawCalendarIcon(ctx, pillBoxX + 18, pillBoxY + 16, theme.primary);
 
   // Format readable Date & Time
   let dateLine = formatDate(options.startDate);
@@ -489,14 +489,14 @@ export async function generateInvitationPassImage(
   ctx.textAlign = "left";
   ctx.fillStyle = "#0f172a";
   ctx.font = "bold 13px system-ui, -apple-system, sans-serif";
-  ctx.fillText(dateLine, pillBoxX + 54, pillBoxY + 32);
+  ctx.fillText(dateLine, pillBoxX + 54, pillBoxY + 30);
 
   ctx.fillStyle = "#64748b";
   ctx.font = "600 12px system-ui, -apple-system, sans-serif";
-  ctx.fillText(timeLine || "Starts on schedule", pillBoxX + 54, pillBoxY + 50);
+  ctx.fillText(timeLine || "Starts on schedule", pillBoxX + 54, pillBoxY + 48);
 
   // Right Column: Venue
-  drawLocationIcon(ctx, cx + 18, pillBoxY + 18, theme.primary);
+  drawLocationIcon(ctx, cx + 18, pillBoxY + 16, theme.primary);
 
   ctx.textAlign = "left";
   ctx.fillStyle = "#0f172a";
@@ -505,20 +505,97 @@ export async function generateInvitationPassImage(
   const venueText = options.venue || "Campus Lab / Online";
   const venueTruncated =
     venueText.length > 22 ? venueText.substring(0, 20) + "..." : venueText;
-  ctx.fillText(venueTruncated, cx + 48, pillBoxY + 32);
+  ctx.fillText(venueTruncated, cx + 48, pillBoxY + 30);
 
   ctx.fillStyle = "#64748b";
   ctx.font = "600 12px system-ui, -apple-system, sans-serif";
-  ctx.fillText("Campus Lab / Online", cx + 48, pillBoxY + 50);
+  ctx.fillText("Campus Lab / Online", cx + 48, pillBoxY + 48);
 
-  // 9. QR Code Section (Center, Symmetrical, High Resolution)
-  const qrBoxY = 375;
-  const qrSize = 310;
+  // 9. Registered Attendee & Event Coordinators 2-Column Info Card
+  const detailsBoxY = 338;
+  const detailsBoxW = width - 108;
+  const detailsBoxH = 58;
+  const detailsBoxX = cx - detailsBoxW / 2;
+
+  ctx.fillStyle = "#f8fafc";
+  roundRect(ctx, detailsBoxX, detailsBoxY, detailsBoxW, detailsBoxH, 14);
+  ctx.fill();
+
+  ctx.strokeStyle = theme.borderTint;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Vertical divider
+  ctx.strokeStyle = theme.borderTint;
+  ctx.beginPath();
+  ctx.moveTo(cx, detailsBoxY + 6);
+  ctx.lineTo(cx, detailsBoxY + detailsBoxH - 6);
+  ctx.stroke();
+
+  // Left Column: REGISTERED ATTENDEE
+  ctx.textAlign = "left";
+  ctx.fillStyle = theme.primary;
+  ctx.font = "800 10px system-ui, -apple-system, sans-serif";
+  ctx.fillText("REGISTERED ATTENDEE", detailsBoxX + 16, detailsBoxY + 18);
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 13px system-ui, -apple-system, sans-serif";
+  const attNameTrunc =
+    options.attendeeName.length > 20
+      ? options.attendeeName.substring(0, 18) + "..."
+      : options.attendeeName;
+  ctx.fillText(attNameTrunc, detailsBoxX + 16, detailsBoxY + 34);
+
+  ctx.fillStyle = "#64748b";
+  ctx.font = "600 10px system-ui, -apple-system, sans-serif";
+  const attSub = options.classSemester || options.attendeeEmail || "";
+  const attSubTrunc = attSub.length > 24 ? attSub.substring(0, 22) + "..." : attSub;
+  ctx.fillText(attSubTrunc, detailsBoxX + 16, detailsBoxY + 48);
+
+  // Right Column: EVENT COORDINATORS
+  ctx.fillStyle = theme.primary;
+  ctx.font = "800 10px system-ui, -apple-system, sans-serif";
+  ctx.fillText("EVENT COORDINATORS", cx + 16, detailsBoxY + 18);
+
+  const coord1 = options.coordinator1Name || options.coordinatorName || "Coordinator";
+  const coord1Phone = options.coordinator1Phone || options.coordinatorPhone || "+91 9895461970";
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
+  ctx.fillText(
+    `${coord1} (${coord1Phone.replace("+91 ", "")})`,
+    cx + 16,
+    detailsBoxY + 34
+  );
+
+  const coord2 = options.coordinator2Name;
+  const coord2Phone = options.coordinator2Phone;
+  ctx.fillStyle = "#64748b";
+  ctx.font = "600 10px system-ui, -apple-system, sans-serif";
+  if (coord2) {
+    ctx.fillText(`${coord2} (${coord2Phone || ""})`, cx + 16, detailsBoxY + 48);
+  } else {
+    ctx.fillText("FOSS CEPerumon Chapter", cx + 16, detailsBoxY + 48);
+  }
+
+  // 10. Dashed Perforation Line at notchY separating pass from ticket stub
+  ctx.save();
+  ctx.strokeStyle = theme.borderTint;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.moveTo(notchR + 8, notchY);
+  ctx.lineTo(width - notchR - 8, notchY);
+  ctx.stroke();
+  ctx.restore();
+
+  // 11. QR Code Section (Center, Symmetrical, High Resolution)
+  const qrBoxY = 445;
+  const qrSize = 300;
   const qrX = cx - qrSize / 2;
 
   // Flanking vertical accent lines with diamond markers on left & right of QR
-  drawVerticalAccentRule(ctx, qrX - 35, qrBoxY + 40, qrSize - 80, theme.primary);
-  drawVerticalAccentRule(ctx, qrX + qrSize + 35, qrBoxY + 40, qrSize - 80, theme.primary);
+  drawVerticalAccentRule(ctx, qrX - 35, qrBoxY + 35, qrSize - 70, theme.primary);
+  drawVerticalAccentRule(ctx, qrX + qrSize + 35, qrBoxY + 35, qrSize - 70, theme.primary);
 
   // QR Container Card
   ctx.save();
@@ -572,7 +649,7 @@ export async function generateInvitationPassImage(
   ctx.font = "900 13px system-ui, -apple-system, sans-serif";
   ctx.fillText("FOSS", cx, qrBoxY + qrSize / 2);
 
-  // 10. Ticket Code Pill (Solid Theme Color)
+  // 12. Ticket Code Pill (Solid Theme Color)
   const codePillY = qrBoxY + qrSize + 22;
   const codePillW = 320;
   const codePillH = 48;
@@ -591,90 +668,19 @@ export async function generateInvitationPassImage(
   // Subtitle: SCAN FOR ENTRY CHECK-IN
   ctx.fillStyle = theme.primary;
   ctx.font = "800 11px system-ui, -apple-system, sans-serif";
-  ctx.fillText("SCAN FOR ENTRY CHECK-IN", cx, codePillY + codePillH + 18);
+  ctx.fillText("SCAN FOR ENTRY CHECK-IN • FOSS UNITED STUDENTS CHAPTER", cx, codePillY + codePillH + 18);
 
-  // 11. Registered Attendee & Coordinator Details Box
-  const detailsBoxY = codePillY + codePillH + 30;
-  const detailsBoxW = width - 110;
-  const detailsBoxH = 68;
-  const detailsBoxX = cx - detailsBoxW / 2;
-
-  ctx.save();
-  ctx.fillStyle = "#ffffff";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.04)";
-  ctx.shadowBlur = 6;
-  roundRect(ctx, detailsBoxX, detailsBoxY, detailsBoxW, detailsBoxH, 16);
-  ctx.fill();
-  ctx.restore();
-
-  ctx.strokeStyle = theme.borderTint;
-  ctx.lineWidth = 1.4;
-  roundRect(ctx, detailsBoxX, detailsBoxY, detailsBoxW, detailsBoxH, 16);
-  ctx.stroke();
-
-  // Vertical divider in the details box
-  ctx.strokeStyle = theme.borderTint;
-  ctx.beginPath();
-  ctx.moveTo(cx, detailsBoxY + 8);
-  ctx.lineTo(cx, detailsBoxY + detailsBoxH - 8);
-  ctx.stroke();
-
-  // Left Column: REGISTERED ATTENDEE
-  ctx.textAlign = "left";
-  ctx.fillStyle = theme.primary;
-  ctx.font = "800 10px system-ui, -apple-system, sans-serif";
-  ctx.fillText("REGISTERED ATTENDEE", detailsBoxX + 16, detailsBoxY + 20);
-
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "bold 13px system-ui, -apple-system, sans-serif";
-  const attNameTrunc =
-    options.attendeeName.length > 20
-      ? options.attendeeName.substring(0, 18) + "..."
-      : options.attendeeName;
-  ctx.fillText(attNameTrunc, detailsBoxX + 16, detailsBoxY + 38);
-
-  ctx.fillStyle = "#64748b";
-  ctx.font = "600 11px system-ui, -apple-system, sans-serif";
-  const attSub = options.classSemester || options.attendeeEmail || "";
-  const attSubTrunc = attSub.length > 22 ? attSub.substring(0, 20) + "..." : attSub;
-  ctx.fillText(attSubTrunc, detailsBoxX + 16, detailsBoxY + 54);
-
-  // Right Column: EVENT COORDINATORS
-  ctx.fillStyle = theme.primary;
-  ctx.font = "800 10px system-ui, -apple-system, sans-serif";
-  ctx.fillText("EVENT COORDINATORS", cx + 16, detailsBoxY + 20);
-
-  const coord1 = options.coordinator1Name || options.coordinatorName || "Coordinator";
-  const coord1Phone = options.coordinator1Phone || options.coordinatorPhone || "+91 9895461970";
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "bold 12px system-ui, -apple-system, sans-serif";
-  ctx.fillText(
-    `${coord1} (${coord1Phone.replace("+91 ", "")})`,
-    cx + 16,
-    detailsBoxY + 38
-  );
-
-  const coord2 = options.coordinator2Name;
-  const coord2Phone = options.coordinator2Phone;
-  ctx.fillStyle = "#64748b";
-  ctx.font = "600 11px system-ui, -apple-system, sans-serif";
-  if (coord2) {
-    ctx.fillText(`${coord2} (${coord2Phone || ""})`, cx + 16, detailsBoxY + 54);
-  } else {
-    ctx.fillText("FOSS CEPerumon Chapter", cx + 16, detailsBoxY + 54);
-  }
-
-  // 12. Warning Notice
+  // 13. Warning Notice
   ctx.textAlign = "center";
   ctx.fillStyle = theme.primaryDark;
   ctx.font = "800 11px system-ui, -apple-system, sans-serif";
   ctx.fillText(
     "⚠️ SAVE THIS QR PASS • DO NOT MISS IT • SHOW AT ENTRY DESK",
     cx,
-    detailsBoxY + detailsBoxH + 22
+    codePillY + codePillH + 46
   );
 
-  // 13. Outer Border Stroke for the entire Portrait Pass
+  // 14. Outer Border Stroke for the entire Portrait Pass
   ctx.restore(); // restore clip
   ctx.strokeStyle = theme.borderTint;
   ctx.lineWidth = 2.5;
@@ -721,8 +727,7 @@ function drawDiamond(
   ctx.beginPath();
   ctx.moveTo(x, y - r);
   ctx.lineTo(x + r, y);
-  ctx.lineTo(x, y + r);
-  ctx.lineTo(x - r, y);
+  ctx.lineTo(x, y - r);
   ctx.closePath();
   ctx.fill();
 }
@@ -764,20 +769,18 @@ function drawLocationIcon(
 ) {
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.fillStyle = color;
   ctx.lineWidth = 2;
   ctx.lineCap = "round";
+  ctx.lineJoin = "round";
 
   ctx.beginPath();
-  ctx.arc(x + 11, y + 9, 8, Math.PI * 0.8, Math.PI * 2.2);
-  ctx.lineTo(x + 11, y + 24);
-  ctx.closePath();
-  ctx.fill();
+  ctx.arc(x + 10, y + 9, 7, 0, Math.PI * 2);
+  ctx.stroke();
 
-  ctx.fillStyle = "#ffffff";
   ctx.beginPath();
-  ctx.arc(x + 11, y + 9, 3, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(x + 10, y + 16);
+  ctx.lineTo(x + 10, y + 24);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -789,7 +792,7 @@ export interface GeneratedTicketPdf {
 }
 
 /**
- * Generates an official downloadable PDF ticket containing the vertical portrait pass.
+ * Generates an official event admission pass PDF formatted for standard A4 portrait print/display.
  */
 export async function generateTicketPdf(
   options: InvitationPassOptions

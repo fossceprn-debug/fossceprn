@@ -147,3 +147,4 @@ export async function syncBatchCertificatesToDrive(
     window.open(driveLink, "_blank", "noopener,noreferrer");
   }
 }
+
