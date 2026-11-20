@@ -33,7 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { getEventRegistrations, checkInAttendee, updateAttendeeAttendance, updateEventAdmin } from "@/lib/adminService";
-import { resendRegistrationTicket } from "@/lib/emailService";
+import { resendRegistrationTicket, sendParticipantCertificate } from "@/lib/emailService";
 import { generateTicketPdf } from "@/lib/passGenerator";
 import { generateAttendeeCertificate } from "@/lib/certificateGenerator";
 import QRCode from "qrcode";
@@ -91,6 +91,8 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
   const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
   const [downloadingTicketId, setDownloadingTicketId] = useState<string | null>(null);
   const [generatingCertId, setGeneratingCertId] = useState<string | null>(null);
+  const [sendingCertId, setSendingCertId] = useState<string | null>(null);
+  const [bulkSendingCerts, setBulkSendingCerts] = useState(false);
   const [certModalOpen, setCertModalOpen] = useState(false);
   const [driveLinkInput, setDriveLinkInput] = useState(event?.certificate_drive_link || "");
   const [updatingDriveLink, setUpdatingDriveLink] = useState(false);
@@ -228,6 +230,91 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
     } finally {
       setGeneratingCertId(null);
     }
+  };
+
+  const handleSendCertificateEmail = async (reg: EventRegistration) => {
+    if (!event) return;
+    if (!reg.checked_in) {
+      const confirmSend = window.confirm(
+        `${reg.full_name} is currently not marked Present. Do you want to mark them Present and send their certificate to ${reg.email}?`
+      );
+      if (!confirmSend) return;
+      await updateAttendeeAttendance(reg.id, true);
+      reg.checked_in = true;
+    }
+
+    setSendingCertId(reg.id);
+    setActionAlert(null);
+    try {
+      const res = await sendParticipantCertificate(reg, event);
+      if (res.success) {
+        setActionAlert({
+          type: "success",
+          text: `Certificate successfully sent to ${reg.email}!`,
+        });
+        setRegistrations((prev) =>
+          prev.map((r) =>
+            r.id === reg.id
+              ? {
+                  ...r,
+                  checked_in: true,
+                  certificate_issued: true,
+                  certificate_issued_at: new Date().toISOString(),
+                }
+              : r
+          )
+        );
+      } else {
+        setActionAlert({
+          type: "error",
+          text: res.error || `Could not deliver certificate to ${reg.email}`,
+        });
+      }
+    } catch (err: any) {
+      setActionAlert({
+        type: "error",
+        text: err.message || "Failed to send certificate email.",
+      });
+    } finally {
+      setSendingCertId(null);
+    }
+  };
+
+  const handleSendAllCertificates = async () => {
+    if (!event) return;
+    const attended = registrations.filter((r) => r.checked_in);
+    if (attended.length === 0) {
+      alert("No attendees are marked present yet. Please mark attendance first.");
+      return;
+    }
+
+    const confirmSend = window.confirm(
+      `Send official participation certificates via email to all ${attended.length} attended participant(s)?`
+    );
+    if (!confirmSend) return;
+
+    setBulkSendingCerts(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const attendee of attended) {
+      try {
+        const res = await sendParticipantCertificate(attendee, event);
+        if (res.success) successCount++;
+        else failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setBulkSendingCerts(false);
+    loadRegistrations();
+    setActionAlert({
+      type: successCount > 0 ? "success" : "error",
+      text: `Batch Certificate dispatch: ${successCount} sent to registered emails${
+        failCount > 0 ? `, ${failCount} failed.` : "."
+      }`,
+    });
   };
 
   const handleSaveDriveLink = async () => {
@@ -950,6 +1037,28 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                             </button>
                           )}
 
+                          {/* Email Certificate directly to Registered Email / Gmail */}
+                          <button
+                            onClick={() => handleSendCertificateEmail(reg)}
+                            disabled={sendingCertId === reg.id}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              reg.certificate_issued
+                                ? "text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100"
+                                : "text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
+                            }`}
+                            title={
+                              reg.certificate_issued
+                                ? `Certificate already issued — Click to resend email to ${reg.email}`
+                                : `Email Official Certificate to ${reg.email}`
+                            }
+                          >
+                            {sendingCertId === reg.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                            ) : (
+                              <Send className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
                           {/* Manual Attendance Toggle */}
                           {reg.checked_in ? (
                             <Button
@@ -1079,6 +1188,20 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                     className="h-9 text-xs rounded-xl"
                   >
                     Close
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={bulkSendingCerts || totalCheckedIn === 0}
+                    onClick={handleSendAllCertificates}
+                    className="h-9 px-3.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-xl gap-1.5 shadow-sm"
+                    title="Send official certificates to all present attendees' emails"
+                  >
+                    {bulkSendingCerts ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    <span>Email to All ({totalCheckedIn})</span>
                   </Button>
                   <Button
                     size="sm"

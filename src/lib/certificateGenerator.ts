@@ -70,6 +70,11 @@ const WHITE = "#ffffff";
 
 const SIGNATURES = [
   {
+    src: sigCommunityLeadBase64,
+    name: "Ms. ABIYA DANIEL",
+    role: "COMMUNITY LEAD",
+  },
+  {
     src: sigFaculty1Base64,
     name: "Ms. ANJU VENUGOPAL",
     role: "FACULTY COORDINATOR",
@@ -83,11 +88,6 @@ const SIGNATURES = [
     src: sigPrincipalBase64,
     name: "Dr BEJOY ABRAHAM",
     role: "PRINCIPAL",
-  },
-  {
-    src: sigCommunityLeadBase64,
-    name: "Abiya Daniel",
-    role: "EVENT LEAD, FOSS CEPRN",
   },
 ];
 

@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Loader2,
   Ticket,
+  MessageCircle,
 } from "lucide-react";
 
 import {
@@ -1056,6 +1057,22 @@ export const EventRegistrationModal: React.FC<
               />
 
             </div>
+
+            {/* WhatsApp Group Joining Option (If link configured for event) */}
+            {event.whatsapp_group_link && (
+              <div className="max-w-[410px] mx-auto w-full">
+                <a
+                  href={event.whatsapp_group_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-white font-bold text-xs sm:text-sm shadow-md transition-all transform hover:scale-[1.02] active:scale-[0.98] bg-[#25D366] hover:bg-[#20ba5a]"
+                  title="Join Official Event WhatsApp Group"
+                >
+                  <MessageCircle className="w-4 h-4 fill-current" />
+                  <span>Join Event WhatsApp Group</span>
+                </a>
+              </div>
+            )}
 
             {/* Action Buttons */}
 

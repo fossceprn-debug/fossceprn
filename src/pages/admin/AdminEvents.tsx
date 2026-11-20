@@ -22,6 +22,7 @@ import {
   Database,
   Check,
   Award,
+  MessageCircle,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -106,6 +107,7 @@ export const AdminEvents: React.FC = () => {
     volunteer2_name: "",
     volunteer2_id: "" as string | null,
     volunteer2_type: "execom" as "execom" | "external",
+    whatsapp_group_link: "",
     certificate_drive_link: "",
     certificate_template_url: "",
     certificate_enabled: true,
@@ -168,6 +170,7 @@ export const AdminEvents: React.FC = () => {
       volunteer2_name: "",
       volunteer2_id: "",
       volunteer2_type: "execom",
+      whatsapp_group_link: "",
       certificate_drive_link: "",
       certificate_template_url: "",
       certificate_enabled: true,
@@ -241,6 +244,7 @@ export const AdminEvents: React.FC = () => {
       volunteer2_name: evt.volunteer2_name || (foundV2 ? foundV2.full_name : ""),
       volunteer2_id: evt.volunteer2_id || (foundV2 ? foundV2.id : ""),
       volunteer2_type: foundV2 || !evt.volunteer2_name ? "execom" : "external",
+      whatsapp_group_link: evt.whatsapp_group_link || "",
       certificate_drive_link: evt.certificate_drive_link || "",
       certificate_template_url: evt.certificate_template_url || "",
       certificate_enabled: evt.certificate_enabled ?? true,
@@ -1178,6 +1182,33 @@ export const AdminEvents: React.FC = () => {
                   }
                 />
               )}
+            </div>
+
+            {/* WhatsApp Group Link Configuration */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold text-slate-800">
+                  Event WhatsApp Group
+                </h4>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  WhatsApp Group Invite Link (Optional)
+                </label>
+                <Input
+                  placeholder="https://chat.whatsapp.com/..."
+                  value={formData.whatsapp_group_link || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, whatsapp_group_link: e.target.value })
+                  }
+                  className="h-9 text-xs rounded-xl bg-white"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Registered attendees will receive a "Join WhatsApp Group" button immediately upon registering and viewing their ticket pass.
+                </p>
+              </div>
             </div>
 
             {/* Certificate & Google Drive Configuration */}

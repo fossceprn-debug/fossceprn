@@ -42,6 +42,8 @@ import {
   Ticket,
   Award,
   Send,
+  ChevronDown,
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/authContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -76,7 +78,7 @@ import { ActivityCalendar, getCategoryBadgeClasses } from "@/components/calendar
 import { formatDate } from "@/lib/utils";
 import { EventRegistrationQuestionsBuilder } from "@/components/events/EventRegistrationQuestionsBuilder";
 import { EventAttendeesModal } from "@/components/events/EventAttendeesModal";
-import { resendRegistrationTicket } from "@/lib/emailService";
+import { resendRegistrationTicket, sendParticipantCertificate } from "@/lib/emailService";
 import { generateTicketPdf } from "@/lib/passGenerator";
 import { generateAttendeeCertificate } from "@/lib/certificateGenerator";
 import QRCode from "qrcode";
@@ -209,6 +211,7 @@ export const ExecomDashboard: React.FC = () => {
     volunteer2_name: "",
     volunteer2_id: "" as string | null,
     volunteer2_type: "execom" as "execom" | "external",
+    whatsapp_group_link: "",
     certificate_drive_link: "",
     certificate_template_url: "",
     certificate_enabled: true,
@@ -444,6 +447,69 @@ export const ExecomDashboard: React.FC = () => {
     } finally {
       setGeneratingCertId(null);
     }
+  };
+
+  const [sendingCertId, setSendingCertId] = useState<string | null>(null);
+  const [bulkSendingCerts, setBulkSendingCerts] = useState(false);
+  const [mobileTabDropdownOpen, setMobileTabDropdownOpen] = useState(false);
+
+  const handleSendCertificateToParticipant = async (reg: EventRegistration) => {
+    const curEvt = events.find((e) => e.id === selectedParticipantEventId);
+    if (!curEvt) return;
+    if (!reg.checked_in) {
+      alert("Only attended participants (marked Present) can receive an official certificate.");
+      return;
+    }
+    setSendingCertId(reg.id);
+    try {
+      const res = await sendParticipantCertificate(reg, curEvt);
+      if (res.success) {
+        setParticipantAlert({
+          type: "success",
+          text: `Certificate successfully emailed to ${reg.full_name} (${reg.email}).`,
+        });
+      } else {
+        setParticipantAlert({
+          type: "error",
+          text: res.error || "Failed to send certificate email.",
+        });
+      }
+    } catch (err: any) {
+      setParticipantAlert({
+        type: "error",
+        text: err?.message || "Failed to send certificate email.",
+      });
+    } finally {
+      setSendingCertId(null);
+    }
+  };
+
+  const handleBatchEmailCertificates = async (curEvt: EventItem) => {
+    const attended = participantRegistrations.filter((r) => r.checked_in);
+    if (attended.length === 0) {
+      alert("No checked-in participants found for this event.");
+      return;
+    }
+    if (!confirm(`Are you sure you want to email official certificates to all ${attended.length} attended participants?`)) {
+      return;
+    }
+    setBulkSendingCerts(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const attendee of attended) {
+      try {
+        const res = await sendParticipantCertificate(attendee, curEvt);
+        if (res.success) successCount++;
+        else failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    setBulkSendingCerts(false);
+    setParticipantAlert({
+      type: successCount > 0 ? "success" : "error",
+      text: `Batch certificate email complete: ${successCount} sent successfully${failCount > 0 ? `, ${failCount} failed.` : "."}`,
+    });
   };
 
   const handleApproveEvent = async (evt: EventItem) => {
@@ -913,6 +979,7 @@ export const ExecomDashboard: React.FC = () => {
       volunteer2_name: "",
       volunteer2_id: "",
       volunteer2_type: "execom",
+      whatsapp_group_link: "",
       certificate_drive_link: "",
       certificate_template_url: "",
       certificate_enabled: true,
@@ -992,6 +1059,7 @@ export const ExecomDashboard: React.FC = () => {
       volunteer2_name: evt.volunteer2_name || (foundV2 ? foundV2.full_name : ""),
       volunteer2_id: evt.volunteer2_id || (foundV2 ? foundV2.id : ""),
       volunteer2_type: foundV2 || !evt.volunteer2_name ? "execom" : "external",
+      whatsapp_group_link: evt.whatsapp_group_link || "",
       certificate_drive_link: evt.certificate_drive_link || "",
       certificate_template_url: evt.certificate_template_url || "",
       certificate_enabled: evt.certificate_enabled ?? true,
@@ -1205,8 +1273,143 @@ export const ExecomDashboard: React.FC = () => {
         </div>
 
         {/* Tab Navigation Navigation Strip */}
-        <div className="bg-slate-50/80 border-t border-slate-200/60 px-3 sm:px-6 lg:px-8 w-full max-w-full overflow-x-hidden">
-          <div className="w-full max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
+        <div className="bg-slate-50/80 border-t border-slate-200/60 px-3 sm:px-6 lg:px-8 w-full max-w-full">
+          {/* Mobile Dropdown Tab Selector (Replaces horizontal scrolling) */}
+          <div className="md:hidden py-2 relative">
+            <button
+              type="button"
+              onClick={() => setMobileTabDropdownOpen(!mobileTabDropdownOpen)}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 shadow-xs text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              aria-expanded={mobileTabDropdownOpen}
+            >
+              <div className="flex items-center gap-2 truncate">
+                {activeTab === "events" && <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />}
+                {activeTab === "scanner" && <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />}
+                {activeTab === "participants" && <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />}
+                {activeTab === "calendar" && <CalendarDays className="w-4 h-4 text-emerald-600 shrink-0" />}
+                {activeTab === "team" && <Users className="w-4 h-4 text-emerald-600 shrink-0" />}
+                {activeTab === "announcements" && <Megaphone className="w-4 h-4 text-emerald-600 shrink-0" />}
+                <span className="truncate">
+                  {activeTab === "events" && "Events & Workshops"}
+                  {activeTab === "scanner" && "Event QR Scanner"}
+                  {activeTab === "participants" && "Participants List"}
+                  {activeTab === "calendar" && "Activity Calendar"}
+                  {activeTab === "team" && "ExeCom Team Directory"}
+                  {activeTab === "announcements" && "Broadcast Announcements"}
+                </span>
+                {activeTab === "events" && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-emerald-100 text-emerald-800">
+                    {events.length}
+                  </span>
+                )}
+                {activeTab === "calendar" && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-emerald-100 text-emerald-800">
+                    {upcomingActivitiesCount}
+                  </span>
+                )}
+                {activeTab === "team" && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-emerald-100 text-emerald-800">
+                    {execomMembers.length}
+                  </span>
+                )}
+              </div>
+              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${mobileTabDropdownOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {mobileTabDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setMobileTabDropdownOpen(false)}
+                />
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden py-1 divide-y divide-slate-100">
+                  <button
+                    onClick={() => { setActiveTab("events"); setMobileTabDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold ${
+                      activeTab === "events" ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Calendar className="w-4 h-4 text-slate-500" />
+                      <span>Events & Workshops</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600">
+                      {events.length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("scanner"); setMobileTabDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold ${
+                      activeTab === "scanner" ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <QrCode className="w-4 h-4 text-slate-500" />
+                      <span>Event QR Scanner</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("participants"); setMobileTabDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold ${
+                      activeTab === "participants" ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <UserCheck className="w-4 h-4 text-slate-500" />
+                      <span>Participants List</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("calendar"); setMobileTabDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold ${
+                      activeTab === "calendar" ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <CalendarDays className="w-4 h-4 text-slate-500" />
+                      <span>Activity Calendar</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600">
+                      {upcomingActivitiesCount}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("team"); setMobileTabDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold ${
+                      activeTab === "team" ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Users className="w-4 h-4 text-slate-500" />
+                      <span>ExeCom Team Directory</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600">
+                      {execomMembers.length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("announcements"); setMobileTabDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold ${
+                      activeTab === "announcements" ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Megaphone className="w-4 h-4 text-slate-500" />
+                      <span>Broadcast Announcements</span>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Desktop Horizontal Tabs */}
+          <div className="hidden md:flex w-full max-w-7xl mx-auto items-center gap-2 overflow-x-auto py-2">
             <button
               onClick={() => setActiveTab("events")}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -2135,6 +2338,22 @@ export const ExecomDashboard: React.FC = () => {
                           <span>Certificates ({attendedCount})</span>
                         </Button>
 
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={attendedCount === 0 || bulkSendingCerts}
+                          onClick={() => handleBatchEmailCertificates(curEvt)}
+                          className="h-9 px-3 text-xs font-bold gap-1.5 border-blue-300 text-blue-800 bg-blue-50 hover:bg-blue-100"
+                          title="Email official participation certificates to all attended participants"
+                        >
+                          {bulkSendingCerts ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                          ) : (
+                            <Send className="w-3.5 h-3.5 text-blue-600" />
+                          )}
+                          <span>Email All Certs ({attendedCount})</span>
+                        </Button>
+
                         {curEvt.certificate_drive_link && (
                           <Button
                             asChild
@@ -2451,6 +2670,22 @@ export const ExecomDashboard: React.FC = () => {
                                         <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
                                       ) : (
                                         <Award className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
+                                  )}
+
+                                  {/* Certificate Send Email (Only for checked-in participants) */}
+                                  {reg.checked_in && (
+                                    <button
+                                      onClick={() => handleSendCertificateToParticipant(reg)}
+                                      disabled={sendingCertId === reg.id}
+                                      className="p-1.5 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors"
+                                      title="Send official Certificate PDF to registered Gmail/Email"
+                                    >
+                                      {sendingCertId === reg.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                                      ) : (
+                                        <Send className="w-3.5 h-3.5" />
                                       )}
                                     </button>
                                   )}
@@ -3289,6 +3524,33 @@ export const ExecomDashboard: React.FC = () => {
                   }
                 />
               )}
+            </div>
+
+            {/* WhatsApp Group Link Configuration */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold text-slate-800">
+                  Event WhatsApp Group
+                </h4>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  WhatsApp Group Invite Link (Optional)
+                </label>
+                <Input
+                  placeholder="https://chat.whatsapp.com/..."
+                  value={eventForm.whatsapp_group_link || ""}
+                  onChange={(e) =>
+                    setEventForm({ ...eventForm, whatsapp_group_link: e.target.value })
+                  }
+                  className="h-9 text-xs rounded-xl bg-white"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Participants will see a "Join WhatsApp Group" button immediately after registering and downloading their pass.
+                </p>
+              </div>
             </div>
 
             {/* Certificate & Google Drive Folder Configuration */}

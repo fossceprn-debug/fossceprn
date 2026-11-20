@@ -18,6 +18,7 @@ import {
   X,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/authContext";
@@ -42,6 +43,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileNavDropdownOpen, setMobileNavDropdownOpen] = useState(false);
 
   const navLinks = [
     { name: "Overview", href: "/admin", icon: LayoutDashboard },
@@ -319,7 +321,47 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               <Menu className="w-5 h-5" />
             </button>
 
-            {/* Breadcrumb / Title */}
+            {/* Mobile Section Switcher Dropdown */}
+            <div className="sm:hidden relative">
+              <button
+                type="button"
+                onClick={() => setMobileNavDropdownOpen(!mobileNavDropdownOpen)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-bold text-slate-800 transition-colors"
+              >
+                <span className="truncate max-w-[120px]">{title}</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${mobileNavDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {mobileNavDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setMobileNavDropdownOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1.5 z-40 w-56 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden py-1 divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50">
+                      Jump To Admin Section
+                    </div>
+                    {[...navLinks, ...systemLinks].map((link) => {
+                      const Icon = link.icon;
+                      const active = isActive(link.href);
+                      return (
+                        <Link
+                          key={link.name}
+                          to={link.href}
+                          onClick={() => setMobileNavDropdownOpen(false)}
+                          className={`flex items-center gap-2.5 px-3 py-2 text-xs font-semibold ${
+                            active ? "bg-emerald-50 text-emerald-700 font-bold" : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <Icon className="w-3.5 h-3.5" />
+                          <span>{link.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Breadcrumb / Title (Tablet & Desktop) */}
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 font-medium truncate">
               <Link to="/admin" className="hover:text-emerald-600 transition-colors">
                 Admin

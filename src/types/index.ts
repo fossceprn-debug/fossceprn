@@ -108,6 +108,7 @@ export interface EventItem {
   certificate_template_url?: string | null;
   certificate_drive_link?: string | null;
   certificate_enabled?: boolean;
+  whatsapp_group_link?: string | null;
   created_at: string;
 }
 
