@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, extractEventWhatsAppLink } from "@/lib/supabase";
 import {
   saveAssignedCredential,
   findAssignedCredential,
@@ -759,8 +759,13 @@ export async function getAllEventsAdmin(search = "", status = "all"): Promise<Ev
     list = list.filter((e) => e.publication_status === status);
   }
 
-  return list;
+  return list.map((e) => ({
+    ...e,
+    whatsapp_group_link: extractEventWhatsAppLink(e),
+  }));
 }
+
+export { extractEventWhatsAppLink };
 
 function sanitizeEventPayload(payload: Partial<EventItem>): Record<string, any> {
   const allowedCols = [
@@ -805,6 +810,33 @@ function sanitizeEventPayload(payload: Partial<EventItem>): Record<string, any> 
       sanitized[col] = (payload as any)[col];
     }
   }
+
+  // Persist whatsapp_group_link reliably into registration_questions and description
+  const wa = payload.whatsapp_group_link !== undefined ? payload.whatsapp_group_link : extractEventWhatsAppLink(payload);
+  if (wa !== undefined && wa !== null) {
+    const waClean = (wa || "").trim();
+    let questions = Array.isArray(sanitized.registration_questions)
+      ? [...sanitized.registration_questions]
+      : Array.isArray(payload.registration_questions)
+      ? [...payload.registration_questions]
+      : [];
+    questions = questions.filter((q: any) => q && q.id !== "__whatsapp_link__");
+    if (waClean) {
+      questions.push({
+        id: "__whatsapp_link__",
+        question: waClean,
+        type: "text",
+        required: false,
+      });
+    }
+    sanitized.registration_questions = questions;
+
+    if (sanitized.description !== undefined) {
+      const cleanDesc = (sanitized.description || "").replace(/\n?<!--whatsapp:.*?-->/g, "").trim();
+      sanitized.description = waClean ? `${cleanDesc}\n<!--whatsapp:${waClean}-->` : cleanDesc;
+    }
+  }
+
   return sanitized;
 }
 

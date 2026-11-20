@@ -13,7 +13,6 @@ import {
   CheckCircle,
   Clock,
   MapPin,
-  Sparkles,
   LogOut,
   Upload,
   UserCheck,
@@ -80,7 +79,7 @@ import { EventRegistrationQuestionsBuilder } from "@/components/events/EventRegi
 import { EventAttendeesModal } from "@/components/events/EventAttendeesModal";
 import { resendRegistrationTicket, sendParticipantCertificate } from "@/lib/emailService";
 import { generateTicketPdf } from "@/lib/passGenerator";
-import { generateAttendeeCertificate } from "@/lib/certificateGenerator";
+import { generateAttendeeCertificate, generateAllCertificatesZip } from "@/lib/certificateGenerator";
 import QRCode from "qrcode";
 import type {
   EventItem,
@@ -452,26 +451,63 @@ export const ExecomDashboard: React.FC = () => {
   const [sendingCertId, setSendingCertId] = useState<string | null>(null);
   const [bulkSendingCerts, setBulkSendingCerts] = useState(false);
   const [mobileTabDropdownOpen, setMobileTabDropdownOpen] = useState(false);
+  const [mobileFloatingMenuOpen, setMobileFloatingMenuOpen] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
+  const [zipProgress, setZipProgress] = useState("");
+  const [specificCertModalOpen, setSpecificCertModalOpen] = useState(false);
+  const [targetAttendeeForCert, setTargetAttendeeForCert] = useState<EventRegistration | null>(null);
+  const [specificCertTargetEmail, setSpecificCertTargetEmail] = useState("");
 
-  const handleSendCertificateToParticipant = async (reg: EventRegistration) => {
+  const handleOpenSendSpecificCert = (reg: EventRegistration) => {
+    setTargetAttendeeForCert(reg);
+    setSpecificCertTargetEmail(reg.email || "");
+    setSpecificCertModalOpen(true);
+  };
+
+  const handleSendCertToSpecificEmail = async () => {
     const curEvt = events.find((e) => e.id === selectedParticipantEventId);
-    if (!curEvt) return;
-    if (!reg.checked_in) {
-      alert("Only attended participants (marked Present) can receive an official certificate.");
+    if (!curEvt || !targetAttendeeForCert) return;
+    const reg = targetAttendeeForCert;
+    const dest = specificCertTargetEmail.trim();
+    if (!dest) {
+      alert("Please enter a valid recipient Gmail address.");
       return;
     }
+
+    if (!reg.checked_in) {
+      await updateAttendeeAttendance(reg.id, true);
+      reg.checked_in = true;
+    }
+
     setSendingCertId(reg.id);
+    setSpecificCertModalOpen(false);
+    setParticipantAlert({
+      type: "success",
+      text: `Dispatching certificate to ${dest}...`,
+    });
+
     try {
-      const res = await sendParticipantCertificate(reg, curEvt);
+      const res = await sendParticipantCertificate(reg, curEvt, dest);
       if (res.success) {
         setParticipantAlert({
           type: "success",
-          text: `Certificate successfully emailed to ${reg.full_name} (${reg.email}).`,
+          text: res.details || `Certificate successfully delivered to ${dest}!`,
         });
+        setParticipantRegistrations((prev) =>
+          prev.map((r) =>
+            r.id === reg.id
+              ? {
+                  ...r,
+                  certificate_issued: true,
+                  certificate_issued_at: new Date().toISOString(),
+                }
+              : r
+          )
+        );
       } else {
         setParticipantAlert({
           type: "error",
-          text: res.error || "Failed to send certificate email.",
+          text: res.error || `Could not deliver certificate to ${dest}`,
         });
       }
     } catch (err: any) {
@@ -481,7 +517,44 @@ export const ExecomDashboard: React.FC = () => {
       });
     } finally {
       setSendingCertId(null);
+      setTargetAttendeeForCert(null);
     }
+  };
+
+  const handleDownloadAllCertificatesZip = async (curEvt: EventItem) => {
+    const attended = participantRegistrations.filter((r) => r.checked_in);
+    if (attended.length === 0) {
+      alert("No attendees are marked present yet. Mark attendance first to download certificates.");
+      return;
+    }
+
+    setDownloadingZip(true);
+    setZipProgress(`Preparing ZIP package for ${attended.length} attendee(s)...`);
+    try {
+      const result = await generateAllCertificatesZip(curEvt, participantRegistrations, (cur, total, name) => {
+        setZipProgress(`Generating certificate ${cur}/${total}: ${name}`);
+      });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(result.zipBlob);
+      link.download = result.filename;
+      link.click();
+      setParticipantAlert({
+        type: "success",
+        text: `Successfully bundled and downloaded ${result.count} certificates as ZIP archive!`,
+      });
+    } catch (err: any) {
+      setParticipantAlert({
+        type: "error",
+        text: err?.message || "Failed to generate certificates ZIP.",
+      });
+    } finally {
+      setDownloadingZip(false);
+      setZipProgress("");
+    }
+  };
+
+  const handleSendCertificateToParticipant = async (reg: EventRegistration) => {
+    handleOpenSendSpecificCert(reg);
   };
 
   const handleBatchEmailCertificates = async (curEvt: EventItem) => {
@@ -1585,7 +1658,7 @@ export const ExecomDashboard: React.FC = () => {
                     </span>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <Sparkles className="w-5 h-5" />
+                    <Ticket className="w-5 h-5" />
                   </div>
                 </CardContent>
               </Card>
@@ -2354,6 +2427,24 @@ export const ExecomDashboard: React.FC = () => {
                           <span>Email All Certs ({attendedCount})</span>
                         </Button>
 
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={attendedCount === 0 || downloadingZip}
+                          onClick={() => handleDownloadAllCertificatesZip(curEvt)}
+                          className="h-9 px-3 text-xs font-bold gap-1.5 border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+                          title="Download all participation certificates as a single compressed .ZIP file"
+                        >
+                          {downloadingZip ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5 text-emerald-600" />
+                          )}
+                          <span>
+                            {downloadingZip ? zipProgress : `Download All (ZIP) (${attendedCount})`}
+                          </span>
+                        </Button>
+
                         {curEvt.certificate_drive_link && (
                           <Button
                             asChild
@@ -2726,6 +2817,92 @@ export const ExecomDashboard: React.FC = () => {
                 </Card>
               );
             })()}
+
+            {/* SUB-MODAL: SEND CERTIFICATE TO SPECIFIC GMAIL */}
+            {specificCertModalOpen && targetAttendeeForCert && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in">
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                        <Send className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-extrabold text-slate-900">Send Certificate via Email</h4>
+                        <p className="text-[11px] text-slate-500">Deliver official participation PDF via Resend.</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSpecificCertModalOpen(false)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Recipient Details</span>
+                    <p className="text-sm font-black text-slate-900">{targetAttendeeForCert.full_name}</p>
+                    <p className="text-xs text-slate-500 font-mono">Ticket ID: {targetAttendeeForCert.ticket_code}</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800">Target Gmail / Destination Email</label>
+                    <Input
+                      type="email"
+                      placeholder="student@gmail.com"
+                      value={specificCertTargetEmail}
+                      onChange={(e) => setSpecificCertTargetEmail(e.target.value)}
+                      className="h-10 text-xs rounded-xl"
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setSpecificCertTargetEmail(targetAttendeeForCert.email || "")}
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold"
+                      >
+                        Registered: {targetAttendeeForCert.email}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSpecificCertTargetEmail("fossceprn@gmail.com")}
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold"
+                      >
+                        Verified: fossceprn@gmail.com
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                    <strong>Resend Delivery Note:</strong> If in free sandbox mode without custom domain verification, Resend only delivers to the verified address (<code>fossceprn@gmail.com</code>). Delivering to any address routes a verified copy with all student credentials to <code>fossceprn@gmail.com</code>.
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSpecificCertModalOpen(false)}
+                      className="h-9 text-xs rounded-xl"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!specificCertTargetEmail.trim() || sendingCertId === targetAttendeeForCert.id}
+                      onClick={handleSendCertToSpecificEmail}
+                      className="h-9 px-4 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl gap-1.5 shadow-sm"
+                    >
+                      {sendingCertId === targetAttendeeForCert.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Send className="w-3.5 h-3.5" />
+                      )}
+                      <span>Send Certificate</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -3632,6 +3809,152 @@ export const ExecomDashboard: React.FC = () => {
         onClose={() => setAttendeesEvent(null)}
         event={attendeesEvent}
       />
+
+      {/* ==================================================================== */}
+      {/* MOBILE FLOATING MENU BAR (Round Floating Icon Only in Mobilephones) */}
+      {/* ==================================================================== */}
+      <div className="md:hidden">
+        {/* Floating Action Button (FAB) */}
+        <button
+          type="button"
+          onClick={() => setMobileFloatingMenuOpen(!mobileFloatingMenuOpen)}
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xl flex items-center justify-center border-2 border-white/40 active:scale-95 transition-all"
+          aria-label="Toggle ExeCom Navigation Menu"
+        >
+          {mobileFloatingMenuOpen ? (
+            <XCircle className="w-6 h-6" />
+          ) : activeTab === "events" ? (
+            <Calendar className="w-6 h-6" />
+          ) : activeTab === "scanner" ? (
+            <QrCode className="w-6 h-6" />
+          ) : activeTab === "participants" ? (
+            <UserCheck className="w-6 h-6" />
+          ) : activeTab === "calendar" ? (
+            <CalendarDays className="w-6 h-6" />
+          ) : activeTab === "team" ? (
+            <Users className="w-6 h-6" />
+          ) : (
+            <Megaphone className="w-6 h-6" />
+          )}
+        </button>
+
+        {/* Floating Menu Dock */}
+        {mobileFloatingMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs"
+              onClick={() => setMobileFloatingMenuOpen(false)}
+            />
+            <div className="fixed bottom-24 right-6 z-50 w-64 bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-slate-200/80 p-3 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                ExeCom Navigation
+              </div>
+
+              <button
+                onClick={() => { setActiveTab("events"); setMobileFloatingMenuOpen(false); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold ${
+                  activeTab === "events" ? "bg-emerald-600 text-white font-bold" : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Calendar className="w-4 h-4" />
+                  <span>Events & Workshops</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  activeTab === "events" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"
+                }`}>
+                  {events.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("scanner"); setMobileFloatingMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold ${
+                  activeTab === "scanner" ? "bg-emerald-600 text-white font-bold" : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <QrCode className="w-4 h-4" />
+                <span>Event QR Scanner</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("participants"); setMobileFloatingMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold ${
+                  activeTab === "participants" ? "bg-emerald-600 text-white font-bold" : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>Participants List</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("calendar"); setMobileFloatingMenuOpen(false); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold ${
+                  activeTab === "calendar" ? "bg-emerald-600 text-white font-bold" : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <CalendarDays className="w-4 h-4" />
+                  <span>Activity Calendar</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  activeTab === "calendar" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"
+                }`}>
+                  {upcomingActivitiesCount}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("team"); setMobileFloatingMenuOpen(false); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold ${
+                  activeTab === "team" ? "bg-emerald-600 text-white font-bold" : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Users className="w-4 h-4" />
+                  <span>ExeCom Directory</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  activeTab === "team" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"
+                }`}>
+                  {execomMembers.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("announcements"); setMobileFloatingMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold ${
+                  activeTab === "announcements" ? "bg-emerald-600 text-white font-bold" : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <Megaphone className="w-4 h-4" />
+                <span>Announcements</span>
+              </button>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-2">
+                <Link
+                  to="/"
+                  target="_blank"
+                  className="text-[11px] text-slate-500 hover:text-slate-900 font-semibold flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Public Portal</span>
+                </Link>
+                <button
+                  onClick={async () => {
+                    await logout();
+                    navigate("/login");
+                  }}
+                  className="text-[11px] text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

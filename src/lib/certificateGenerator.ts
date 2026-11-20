@@ -18,6 +18,7 @@
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
+import JSZip from "jszip";
 import type { EventItem, EventRegistration } from "@/types";
 import { syncCertificateToDrive } from "./driveSync";
 
@@ -1889,5 +1890,46 @@ export async function generateAttendeeCertificate(
     pdfBlob,
     filename,
     pdfBase64,
+  };
+}
+
+// ============================================================================
+// BATCH CERTIFICATES ZIP ARCHIVE GENERATOR
+// ============================================================================
+
+export async function generateAllCertificatesZip(
+  event: EventItem,
+  attendees: EventRegistration[],
+  onProgress?: (current: number, total: number, currentName: string) => void
+): Promise<{ zipBlob: Blob; filename: string; count: number }> {
+  const zip = new JSZip();
+  const folder = zip.folder(`${event.slug || "event"}-certificates`) || zip;
+  const attendedList = attendees.filter((a) => a.checked_in);
+  const total = attendedList.length;
+
+  for (let i = 0; i < total; i++) {
+    const attendee = attendedList[i];
+    if (onProgress) {
+      onProgress(i + 1, total, attendee.full_name);
+    }
+    const cert = await generateAttendeeCertificate({
+      event,
+      attendee,
+    });
+    folder.file(cert.filename, cert.pdfBlob);
+  }
+
+  const zipBlob = await zip.generateAsync({
+    type: "blob",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  });
+
+  const filename = `${event.slug || "event"}-certificates-all-${total}.zip`;
+
+  return {
+    zipBlob,
+    filename,
+    count: total,
   };
 }

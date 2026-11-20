@@ -13,7 +13,7 @@ import {
   ArrowUpRight,
   TrendingUp,
   RefreshCw,
-  Sparkles,
+  LayoutDashboard,
   BarChart3,
   CheckCircle2,
   Inbox,
@@ -169,7 +169,7 @@ export const AdminOverview: React.FC = () => {
       <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-950 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-emerald-500/30 shadow-xs">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
+            <LayoutDashboard className="w-5 h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">

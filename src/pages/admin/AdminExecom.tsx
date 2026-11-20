@@ -20,7 +20,6 @@ import {
   ExternalLink,
   Search,
   Filter,
-  Sparkles,
   Inbox,
   Check,
   X,
@@ -1285,7 +1284,7 @@ Login URL: ${window.location.origin}${loginPath} (or ${window.location.origin}/a
                   <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3">
                     <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
                       <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         Credentials Ready to Share
                       </span>
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-200/80 text-emerald-900">

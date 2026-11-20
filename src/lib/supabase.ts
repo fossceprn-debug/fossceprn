@@ -34,6 +34,26 @@ export const supabase = createClient(clientUrl, clientKey, {
 });
 
 // Database Fetchers with safe fallback
+export function extractEventWhatsAppLink(evt: any): string {
+  if (!evt) return "";
+  if (evt.whatsapp_group_link && typeof evt.whatsapp_group_link === "string" && evt.whatsapp_group_link.trim()) {
+    return evt.whatsapp_group_link.trim();
+  }
+  const qLink = (evt.registration_questions as any[])?.find((q: any) => q && q.id === "__whatsapp_link__")?.question;
+  if (qLink && typeof qLink === "string" && qLink.trim()) {
+    return qLink.trim();
+  }
+  const descMatch = (evt.description || "").match(/<!--whatsapp:(.*?)-->/);
+  if (descMatch && descMatch[1] && descMatch[1].trim()) {
+    return descMatch[1].trim();
+  }
+  const rawWaMatch = (evt.description || "").match(/https:\/\/(?:chat\.whatsapp\.com|wa\.me)\/[A-Za-z0-9_-]+/);
+  if (rawWaMatch && rawWaMatch[0]) {
+    return rawWaMatch[0].trim();
+  }
+  return "";
+}
+
 export async function getPublishedEvents(): Promise<EventItem[]> {
   let list: EventItem[] = [];
   if (isSupabaseConfigured) {
@@ -45,7 +65,10 @@ export async function getPublishedEvents(): Promise<EventItem[]> {
         .order("start_date", { ascending: true });
 
       if (!error && data) {
-        list = data as EventItem[];
+        list = (data as any[]).map((e) => ({
+          ...e,
+          whatsapp_group_link: extractEventWhatsAppLink(e),
+        })) as EventItem[];
       } else {
         console.warn("[Supabase] Error fetching events:", error?.message);
       }
@@ -64,7 +87,10 @@ export async function getPublishedEvents(): Promise<EventItem[]> {
         const existingIds = new Set(list.map((e) => e.id));
         for (const pe of published) {
           if (!existingIds.has(pe.id)) {
-            list.push(pe);
+            list.push({
+              ...pe,
+              whatsapp_group_link: extractEventWhatsAppLink(pe),
+            });
           }
         }
       }
@@ -122,7 +148,9 @@ export async function getEventBySlugOrId(slugOrId: string): Promise<EventItem | 
       const { data, error } = await query.maybeSingle();
 
       if (!error && data) {
-        return (data as EventItem) || null;
+        const item = data as any;
+        item.whatsapp_group_link = extractEventWhatsAppLink(item);
+        return item as EventItem;
       }
     } catch (err) {
       console.warn("[Supabase] Unexpected error fetching event:", err);
@@ -136,7 +164,10 @@ export async function getEventBySlugOrId(slugOrId: string): Promise<EventItem | 
       const parsed: EventItem[] = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         const found = parsed.find((e) => e.id === slugOrId || e.slug === slugOrId);
-        if (found) return found;
+        if (found) {
+          found.whatsapp_group_link = extractEventWhatsAppLink(found);
+          return found;
+        }
       }
     }
   } catch {}

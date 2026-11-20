@@ -222,10 +222,13 @@ Contact: fossceprn@gmail.com`;
     const attachments = [];
     if (pdfBase64) {
       attachments.push({
-        filename: `Ticket-${ticketCode}.pdf`,
+        filename: (body as any).attachmentFilename || (body as any).filename || `Ticket-${ticketCode}.pdf`,
         content: pdfBase64,
       });
     }
+
+    const emailSubject =
+      (body as any).subject || `Registration Confirmed: ${eventTitle} [Pass ID: ${ticketCode}]`;
 
     // Call Resend API
     let resendRes = await fetch("https://api.resend.com/emails", {
@@ -237,7 +240,7 @@ Contact: fossceprn@gmail.com`;
       body: JSON.stringify({
         from: fromAddress,
         to: [toEmail],
-        subject: `Registration Confirmed: ${eventTitle} [Pass ID: ${ticketCode}]`,
+        subject: emailSubject,
         text: textContent,
         html: htmlContent,
         attachments: attachments.length > 0 ? attachments : undefined,
@@ -258,9 +261,9 @@ Contact: fossceprn@gmail.com`;
         body: JSON.stringify({
           from: fromAddress,
           to: ["fossceprn@gmail.com"],
-          subject: `[Attendee Pass: ${attendeeName}] Registration Confirmed: ${eventTitle} [Pass ID: ${ticketCode}]`,
-          text: `[Attendee Email: ${toEmail}]\n\n` + textContent,
-          html: `<p style="background: #fef3c7; color: #92400e; padding: 10px; border-radius: 8px;"><strong>Resend Sandbox Notice:</strong> Delivered to Chapter Admin. Attendee email: <strong>${toEmail}</strong></p>` + htmlContent,
+          subject: `[Participant: ${attendeeName}] ${emailSubject}`,
+          text: `[Recipient Email: ${toEmail}]\n\n` + textContent,
+          html: `<p style="background: #fef3c7; color: #92400e; padding: 10px; border-radius: 8px;"><strong>Resend Sandbox Notice:</strong> Delivered to Chapter Admin. Recipient email: <strong>${toEmail}</strong></p>` + htmlContent,
           attachments: attachments.length > 0 ? attachments : undefined,
         }),
       });

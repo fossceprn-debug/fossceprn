@@ -35,7 +35,7 @@ import { formatDate } from "@/lib/utils";
 import { getEventRegistrations, checkInAttendee, updateAttendeeAttendance, updateEventAdmin } from "@/lib/adminService";
 import { resendRegistrationTicket, sendParticipantCertificate } from "@/lib/emailService";
 import { generateTicketPdf } from "@/lib/passGenerator";
-import { generateAttendeeCertificate } from "@/lib/certificateGenerator";
+import { generateAttendeeCertificate, generateAllCertificatesZip } from "@/lib/certificateGenerator";
 import QRCode from "qrcode";
 import type { EventItem, EventRegistration } from "@/types";
 
@@ -97,6 +97,11 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
   const [driveLinkInput, setDriveLinkInput] = useState(event?.certificate_drive_link || "");
   const [updatingDriveLink, setUpdatingDriveLink] = useState(false);
   const [actionAlert, setActionAlert] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [downloadingZip, setDownloadingZip] = useState(false);
+  const [zipProgress, setZipProgress] = useState("");
+  const [specificEmailModalOpen, setSpecificEmailModalOpen] = useState(false);
+  const [targetAttendeeForEmail, setTargetAttendeeForEmail] = useState<EventRegistration | null>(null);
+  const [specificEmailInput, setSpecificEmailInput] = useState("");
 
   const loadRegistrations = async () => {
     if (!event) return;
@@ -232,25 +237,39 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
     }
   };
 
-  const handleSendCertificateEmail = async (reg: EventRegistration) => {
-    if (!event) return;
+  const handleOpenSendSpecificEmail = (reg: EventRegistration) => {
+    setTargetAttendeeForEmail(reg);
+    setSpecificEmailInput(reg.email || "");
+    setSpecificEmailModalOpen(true);
+  };
+
+  const handleSendCertificateToSpecificEmail = async () => {
+    if (!event || !targetAttendeeForEmail) return;
+    const reg = targetAttendeeForEmail;
+    const dest = specificEmailInput.trim();
+    if (!dest) {
+      alert("Please enter a valid recipient Gmail address.");
+      return;
+    }
+
     if (!reg.checked_in) {
-      const confirmSend = window.confirm(
-        `${reg.full_name} is currently not marked Present. Do you want to mark them Present and send their certificate to ${reg.email}?`
-      );
-      if (!confirmSend) return;
       await updateAttendeeAttendance(reg.id, true);
       reg.checked_in = true;
     }
 
     setSendingCertId(reg.id);
-    setActionAlert(null);
+    setSpecificEmailModalOpen(false);
+    setActionAlert({
+      type: "success",
+      text: `Sending certificate to ${dest}...`,
+    });
+
     try {
-      const res = await sendParticipantCertificate(reg, event);
+      const res = await sendParticipantCertificate(reg, event, dest);
       if (res.success) {
         setActionAlert({
           type: "success",
-          text: `Certificate successfully sent to ${reg.email}!`,
+          text: res.details || `Certificate successfully delivered to ${dest}!`,
         });
         setRegistrations((prev) =>
           prev.map((r) =>
@@ -267,7 +286,7 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
       } else {
         setActionAlert({
           type: "error",
-          text: res.error || `Could not deliver certificate to ${reg.email}`,
+          text: res.error || `Could not deliver certificate to ${dest}`,
         });
       }
     } catch (err: any) {
@@ -277,7 +296,45 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
       });
     } finally {
       setSendingCertId(null);
+      setTargetAttendeeForEmail(null);
     }
+  };
+
+  const handleDownloadAllCertificatesZip = async () => {
+    if (!event) return;
+    const attended = registrations.filter((r) => r.checked_in);
+    if (attended.length === 0) {
+      alert("No attendees are marked present yet. Mark attendance first to download certificates.");
+      return;
+    }
+
+    setDownloadingZip(true);
+    setZipProgress(`Preparing ZIP package for ${attended.length} attendee(s)...`);
+    try {
+      const result = await generateAllCertificatesZip(event, registrations, (cur, total, name) => {
+        setZipProgress(`Generating certificate ${cur}/${total}: ${name}`);
+      });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(result.zipBlob);
+      link.download = result.filename;
+      link.click();
+      setActionAlert({
+        type: "success",
+        text: `Successfully bundled and downloaded ${result.count} certificates as ZIP archive!`,
+      });
+    } catch (err: any) {
+      setActionAlert({
+        type: "error",
+        text: err?.message || "Failed to generate certificates ZIP.",
+      });
+    } finally {
+      setDownloadingZip(false);
+      setZipProgress("");
+    }
+  };
+
+  const handleSendCertificateEmail = async (reg: EventRegistration) => {
+    handleOpenSendSpecificEmail(reg);
   };
 
   const handleSendAllCertificates = async () => {
@@ -695,6 +752,22 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Export CSV</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadAllCertificatesZip}
+                disabled={totalCheckedIn === 0 || downloadingZip}
+                className="h-9 text-xs rounded-xl gap-1.5 border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-bold"
+                title="Download all participation certificates as a single .ZIP file"
+              >
+                {downloadingZip ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                ) : (
+                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                )}
+                <span>Download All (ZIP)</span>
               </Button>
 
               <Button
@@ -1194,53 +1267,118 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                     disabled={bulkSendingCerts || totalCheckedIn === 0}
                     onClick={handleSendAllCertificates}
                     className="h-9 px-3.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-xl gap-1.5 shadow-sm"
-                    title="Send official certificates to all present attendees' emails"
+                    title="Send official certificates to all present attendees' registered emails"
                   >
                     {bulkSendingCerts ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <Send className="w-3.5 h-3.5" />
                     )}
-                    <span>Email to All ({totalCheckedIn})</span>
+                    <span>Email All ({totalCheckedIn})</span>
                   </Button>
                   <Button
                     size="sm"
-                    disabled={totalCheckedIn === 0}
-                    onClick={async () => {
-                      const attended = registrations.filter((r) => r.checked_in);
-                      if (attended.length === 0) {
-                        alert("No attendees are marked present yet.");
-                        return;
-                      }
-
-                      // Automatically open the provided Google Drive folder
-                      if (event?.certificate_drive_link) {
-                        window.open(event.certificate_drive_link, "_blank", "noopener,noreferrer");
-                      }
-
-                      alert(`Starting generation for ${attended.length} attended participants. Files are synchronizing to your provided Google Drive.`);
-                      for (const att of attended) {
-                        try {
-                          const cert = await generateAttendeeCertificate({ event: event!, attendee: att });
-                          const link = document.createElement("a");
-                          link.href = URL.createObjectURL(cert.pdfBlob);
-                          link.download = cert.filename;
-                          link.click();
-                        } catch (e) {
-                          console.error("Batch cert error:", e);
-                        }
-                      }
-                    }}
+                    disabled={totalCheckedIn === 0 || downloadingZip}
+                    onClick={handleDownloadAllCertificatesZip}
                     className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1.5 shadow-sm"
+                    title="Download all certificates as a single compressed .ZIP file"
                   >
-                    <Award className="w-3.5 h-3.5" />
+                    {downloadingZip ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
                     <span>
-                      {event?.certificate_drive_link
-                        ? `Store to Drive & Download (${totalCheckedIn})`
-                        : `Download Attended Certificates (${totalCheckedIn})`}
+                      {downloadingZip ? zipProgress : `Download All (.ZIP) (${totalCheckedIn})`}
                     </span>
                   </Button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SUB-MODAL: SEND CERTIFICATE TO SPECIFIC GMAIL */}
+        {specificEmailModalOpen && targetAttendeeForEmail && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                    <Send className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">Send Certificate via Email</h4>
+                    <p className="text-[11px] text-slate-500">Deliver official participation PDF via Resend.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSpecificEmailModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Recipient Details</span>
+                <p className="text-sm font-black text-slate-900">{targetAttendeeForEmail.full_name}</p>
+                <p className="text-xs text-slate-500 font-mono">Ticket ID: {targetAttendeeForEmail.ticket_code}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-800">Target Gmail / Destination Email</label>
+                <Input
+                  type="email"
+                  placeholder="student@gmail.com"
+                  value={specificEmailInput}
+                  onChange={(e) => setSpecificEmailInput(e.target.value)}
+                  className="h-10 text-xs rounded-xl"
+                />
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setSpecificEmailInput(targetAttendeeForEmail.email || "")}
+                    className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold"
+                  >
+                    Registered: {targetAttendeeForEmail.email}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpecificEmailInput("fossceprn@gmail.com")}
+                    className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold"
+                  >
+                    Verified: fossceprn@gmail.com
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                <strong>Resend Delivery Note:</strong> If in free sandbox mode without custom domain verification, Resend only delivers to the verified address (<code>fossceprn@gmail.com</code>). Delivering to any address routes a verified copy with all student credentials to <code>fossceprn@gmail.com</code>.
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSpecificEmailModalOpen(false)}
+                  className="h-9 text-xs rounded-xl"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!specificEmailInput.trim() || sendingCertId === targetAttendeeForEmail.id}
+                  onClick={handleSendCertificateToSpecificEmail}
+                  className="h-9 px-4 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl gap-1.5 shadow-sm"
+                >
+                  {sendingCertId === targetAttendeeForEmail.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  <span>Send Certificate</span>
+                </Button>
               </div>
             </div>
           </div>

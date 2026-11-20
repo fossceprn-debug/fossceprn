@@ -13,7 +13,6 @@ import {
   Users,
   Calendar,
   Layers,
-  Sparkles,
   AlertCircle,
   FileSpreadsheet,
   ArrowUpRight,
@@ -331,7 +330,7 @@ export const AdminStorage: React.FC = () => {
                 Pass Image Storage
               </span>
               <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-xs">
-                <Sparkles className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4" />
               </div>
             </div>
             <div>

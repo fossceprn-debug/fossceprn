@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 
 import { formatDate } from "@/lib/utils";
 import { registerForEvent } from "@/lib/adminService";
+import { extractEventWhatsAppLink } from "@/lib/supabase";
 
 import {
   generateInvitationPassImage,
@@ -87,6 +88,7 @@ export const EventRegistrationModal: React.FC<
   const autoDownloadedRef = useRef(false);
 
   const passTheme = getEventPassTheme(event);
+  const resolvedWhatsAppLink = event.whatsapp_group_link || extractEventWhatsAppLink(event);
 
   // Reset when modal opens
   useEffect(() => {
@@ -699,6 +701,22 @@ export const EventRegistrationModal: React.FC<
                 )}
 
               </div>
+
+              {/* Prominent WhatsApp Group Join Option directly below Confirmation Banner */}
+              {resolvedWhatsAppLink && (
+                <div className="pt-2 max-w-[410px] mx-auto w-full animate-fade-in">
+                  <a
+                    href={resolvedWhatsAppLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-center gap-2.5 py-3 px-5 rounded-2xl text-white font-bold text-xs sm:text-sm shadow-lg shadow-[#25D366]/25 transition-all transform hover:scale-[1.02] active:scale-[0.98] bg-[#25D366] hover:bg-[#20ba5a] border border-[#20ba5a]"
+                    title="Join Official Event WhatsApp Group"
+                  >
+                    <MessageCircle className="w-4 h-4 fill-current shrink-0" />
+                    <span>Join Event WhatsApp Group</span>
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* PORTRAIT PASS CARD */}
@@ -1059,10 +1077,10 @@ export const EventRegistrationModal: React.FC<
             </div>
 
             {/* WhatsApp Group Joining Option (If link configured for event) */}
-            {event.whatsapp_group_link && (
+            {resolvedWhatsAppLink && (
               <div className="max-w-[410px] mx-auto w-full">
                 <a
-                  href={event.whatsapp_group_link}
+                  href={resolvedWhatsAppLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-white font-bold text-xs sm:text-sm shadow-md transition-all transform hover:scale-[1.02] active:scale-[0.98] bg-[#25D366] hover:bg-[#20ba5a]"

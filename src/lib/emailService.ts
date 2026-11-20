@@ -613,7 +613,13 @@ export async function sendCertificateEmail(
 
     const errData = await proxyRes.json().catch(() => ({}));
     // Check if free tier domain restriction (403: only send to fossceprn@gmail.com)
-    if (proxyRes.status === 403 && errData.message && errData.message.includes("fossceprn@gmail.com")) {
+    if (
+      proxyRes.status === 403 ||
+      (errData.message &&
+        (errData.message.includes("fossceprn@gmail.com") ||
+          errData.message.includes("testing emails") ||
+          errData.message.includes("domain")))
+    ) {
       console.warn("Resend Sandbox Mode: Dispatching certificate copy to verified account fossceprn@gmail.com");
       const fallbackRes = await fetch("/api/resend/emails", {
         method: "POST",
@@ -637,7 +643,7 @@ export async function sendCertificateEmail(
         return {
           success: true,
           messageId: fbData.id,
-          details: "Certificate sent to fossceprn@gmail.com (Resend Sandbox mode)",
+          details: `Certificate delivered to fossceprn@gmail.com (Resend Sandbox for ${payload.toEmail})`,
         };
       }
     }
@@ -657,6 +663,8 @@ export async function sendCertificateEmail(
           startDate: payload.startDate,
           venue: "College of Engineering Perumon",
           pdfBase64: payload.pdfBase64,
+          subject: subject,
+          attachmentFilename: payload.filename || `Certificate-${payload.certificateId}.pdf`,
           textBody,
           htmlBody,
         },
@@ -678,10 +686,12 @@ export async function sendCertificateEmail(
 
 /**
  * Generates and emails the official participation certificate to an attendee.
+ * Supports sending to the registered attendee email or a custom specific Gmail address.
  */
 export async function sendParticipantCertificate(
   registration: EventRegistration,
-  event: EventItem
+  event: EventItem,
+  customRecipientEmail?: string
 ): Promise<EmailSendResult> {
   try {
     const cert = await generateAttendeeCertificate({
@@ -689,9 +699,11 @@ export async function sendParticipantCertificate(
       attendee: registration,
     });
 
+    const targetEmail = customRecipientEmail?.trim() || registration.email;
+
     return await sendCertificateEmail({
       registrationId: registration.id,
-      toEmail: registration.email,
+      toEmail: targetEmail,
       attendeeName: registration.full_name,
       certificateId: cert.certificateId,
       eventTitle: event.title,

@@ -4,7 +4,7 @@
 -- Run this entire script in Supabase Dashboard -> SQL Editor -> New Query
 -- ============================================================================
 
--- Enable required extensions
+-- Enable required extensions adil 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

@@ -25,7 +25,6 @@ import {
   Copy,
   CheckCheck,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1001,7 +1000,7 @@ Sign-in Portal: ${window.location.origin}/login`;
                   <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3">
                     <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
                       <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         Account Activated & Ready
                       </span>
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-200 text-emerald-900">
