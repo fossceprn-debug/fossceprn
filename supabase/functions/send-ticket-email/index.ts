@@ -230,6 +230,21 @@ Contact: fossceprn@gmail.com`;
     const emailSubject =
       (body as any).subject || `Registration Confirmed: ${eventTitle} [Pass ID: ${ticketCode}]`;
 
+    const templateObj = (body as any).template;
+    const resendPayload: Record<string, any> = {
+      from: fromAddress,
+      to: [toEmail],
+      subject: emailSubject,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    };
+
+    if (templateObj) {
+      resendPayload.template = templateObj;
+    } else {
+      resendPayload.text = textContent;
+      resendPayload.html = htmlContent;
+    }
+
     // Call Resend API
     let resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -237,17 +252,29 @@ Contact: fossceprn@gmail.com`;
         "Authorization": `Bearer ${resendApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: fromAddress,
-        to: [toEmail],
-        subject: emailSubject,
-        text: textContent,
-        html: htmlContent,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      }),
+      body: JSON.stringify(resendPayload),
     });
 
     let resendData = await resendRes.json();
+
+    // If template sending fails (e.g. template not created in Resend dashboard), fallback to text/html
+    if (!resendRes.ok && templateObj) {
+      console.warn("Template sending failed, falling back to html/text content:", resendData);
+      resendPayload.template = undefined;
+      resendPayload.text = textContent;
+      resendPayload.html = htmlContent;
+      resendPayload.tags = [{ name: "template", value: "certificate-delivery" }];
+
+      resendRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(resendPayload),
+      });
+      resendData = await resendRes.json();
+    }
 
     // Handle free tier sandbox domain restriction (403: only delivers to fossceprn@gmail.com)
     if (!resendRes.ok && resendRes.status === 403 && resendData.message?.includes("fossceprn@gmail.com")) {

@@ -279,6 +279,8 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                   checked_in: true,
                   certificate_issued: true,
                   certificate_issued_at: new Date().toISOString(),
+                  certificate_email_status: "sent",
+                  certificate_email_error: null,
                 }
               : r
           )
@@ -288,6 +290,17 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
           type: "error",
           text: res.error || `Could not deliver certificate to ${dest}`,
         });
+        setRegistrations((prev) =>
+          prev.map((r) =>
+            r.id === reg.id
+              ? {
+                  ...r,
+                  certificate_email_status: "failed",
+                  certificate_email_error: res.error || "Certificate delivery failed",
+                }
+              : r
+          )
+        );
       }
     } catch (err: any) {
       setActionAlert({
@@ -971,21 +984,22 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                   <th className="py-2.5 px-3">Contact</th>
                   <th className="py-2.5 px-3">Class/Branch</th>
                   <th className="py-2.5 px-3">Attendance</th>
-                  <th className="py-2.5 px-3">Email Delivery</th>
+                  <th className="py-2.5 px-3">Pass Email</th>
+                  <th className="py-2.5 px-3">Certificate Email</th>
                   <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-10 text-center text-slate-400">
+                    <td colSpan={8} className="py-10 text-center text-slate-400">
                       <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-600" />
                       <span>Loading attendees...</span>
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-10 text-center text-slate-400">
+                    <td colSpan={8} className="py-10 text-center text-slate-400">
                       <Users className="w-6 h-6 mx-auto mb-1 text-slate-300" />
                       <p className="font-semibold text-slate-600">No registrations found</p>
                       <p className="text-[11px]">
@@ -1068,9 +1082,52 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                             onClick={() => handleResendTicketEmail(reg)}
                             disabled={resendingEmailId === reg.id}
                             className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
-                            title="Resend Ticket Email"
+                            title="Resend Ticket Pass Email"
                           >
                             {resendingEmailId === reg.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                            ) : (
+                              <Send className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          {reg.certificate_email_status === "sent" ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200"
+                              title={reg.certificate_issued_at ? `Delivered: ${new Date(reg.certificate_issued_at).toLocaleString()}` : "Delivered"}
+                            >
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span>Sent</span>
+                            </span>
+                          ) : reg.certificate_email_status === "failed" ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200"
+                              title={reg.certificate_email_error || "Certificate delivery failed"}
+                            >
+                              <XCircle className="w-3 h-3 text-rose-600" />
+                              <span>Failed</span>
+                            </span>
+                          ) : reg.certificate_issued ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              <Award className="w-3 h-3 text-emerald-600" />
+                              <span>Issued</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                              <span>Not Sent</span>
+                            </span>
+                          )}
+
+                          <button
+                            onClick={() => handleSendCertificateEmail(reg)}
+                            disabled={sendingCertId === reg.id}
+                            className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                            title={reg.certificate_issued ? "Send certificate email again" : "Send certificate email"}
+                          >
+                            {sendingCertId === reg.id ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
                             ) : (
                               <Send className="w-3.5 h-3.5" />
@@ -1370,14 +1427,18 @@ export const EventAttendeesModal: React.FC<EventAttendeesModalProps> = ({
                   size="sm"
                   disabled={!specificEmailInput.trim() || sendingCertId === targetAttendeeForEmail.id}
                   onClick={handleSendCertificateToSpecificEmail}
-                  className="h-9 px-4 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl gap-1.5 shadow-sm"
+                  className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1.5 shadow-sm"
                 >
                   {sendingCertId === targetAttendeeForEmail.id ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <Send className="w-3.5 h-3.5" />
                   )}
-                  <span>Send Certificate</span>
+                  <span>
+                    {targetAttendeeForEmail.certificate_issued || targetAttendeeForEmail.certificate_email_status === "sent"
+                      ? "Send Certificate Again"
+                      : "Send Certificate"}
+                  </span>
                 </Button>
               </div>
             </div>

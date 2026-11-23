@@ -7,7 +7,7 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { updateRegistrationEmailStatus, updateRegistrationCertificateStatus } from "./adminService";
 import { generateTicketPdf } from "./passGenerator";
-import { generateAttendeeCertificate } from "./certificateGenerator";
+import { generateAttendeeCertificate, formatCertificateFilename } from "./certificateGenerator";
 import QRCode from "qrcode";
 import type { EventItem, EventRegistration } from "@/types";
 
@@ -571,13 +571,20 @@ export async function sendCertificateEmail(
     return { success: false, error: "Recipient email and certificate ID are required." };
   }
 
+  const certFilename = formatCertificateFilename(payload.attendeeName, payload.certificateId);
   const textBody = buildCertificateEmailText(payload);
   const htmlBody = buildCertificateEmailHtml(payload);
   const subject = `Official Certificate: ${payload.eventTitle} - ${payload.attendeeName} [ID: ${payload.certificateId}]`;
 
+  const websiteUrl =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "https://fossceprn.org";
+  const verifyUrl = `${websiteUrl}/verify?id=${payload.certificateId}`;
+
   const attachments: Array<{ filename: string; content: string }> = [
     {
-      filename: payload.filename || `Certificate-${payload.certificateId}.pdf`,
+      filename: certFilename,
       content: payload.pdfBase64,
     },
   ];
@@ -587,71 +594,134 @@ export async function sendCertificateEmail(
     (import.meta.env as any).RESEND_API_KEY ||
     "";
 
-  // Channel 1: Vite Dev Proxy (/api/resend/emails)
-  try {
-    const proxyRes = await fetch("/api/resend/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
+  // 1. Prepare Resend Hosted Template payload ('certificate-delivery')
+  const templatePayload = {
+    from: "FOSS CEPrn <onboarding@resend.dev>",
+    to: [payload.toEmail],
+    subject: subject,
+    template: {
+      id: "certificate-delivery",
+      variables: {
+        PARTICIPANT_NAME: payload.attendeeName,
+        EVENT_TITLE: payload.eventTitle,
+        CERTIFICATE_ID: payload.certificateId,
+        VERIFY_URL: verifyUrl,
       },
-      body: JSON.stringify({
-        from: "FOSS CEPrn <onboarding@resend.dev>",
-        to: [payload.toEmail],
-        subject: subject,
-        text: textBody,
-        html: htmlBody,
-        attachments: attachments,
-      }),
-    });
+    },
+    attachments: attachments,
+  };
 
-    if (proxyRes.ok) {
-      const data = await proxyRes.json();
-      await updateRegistrationCertificateStatus(payload.registrationId, true, payload.certificateId);
-      return { success: true, messageId: data.id };
-    }
+  // 2. Prepare Standard HTML/Text payload
+  const standardPayload = {
+    from: "FOSS CEPrn <onboarding@resend.dev>",
+    to: [payload.toEmail],
+    subject: subject,
+    text: textBody,
+    html: htmlBody,
+    tags: [{ name: "template", value: "certificate-delivery" }],
+    attachments: attachments,
+  };
 
-    const errData = await proxyRes.json().catch(() => ({}));
-    // Check if free tier domain restriction (403: only send to fossceprn@gmail.com)
-    if (
-      proxyRes.status === 403 ||
-      (errData.message &&
-        (errData.message.includes("fossceprn@gmail.com") ||
-          errData.message.includes("testing emails") ||
-          errData.message.includes("domain")))
-    ) {
-      console.warn("Resend Sandbox Mode: Dispatching certificate copy to verified account fossceprn@gmail.com");
-      const fallbackRes = await fetch("/api/resend/emails", {
+  // Helper to attempt dispatch via a given endpoint
+  const trySendToEndpoint = async (url: string, bodyObj: any): Promise<EmailSendResult | null> => {
+    try {
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${resendApiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          from: "FOSS CEPrn <onboarding@resend.dev>",
-          to: ["fossceprn@gmail.com"],
-          subject: `[Participant Certificate: ${payload.attendeeName}] ${subject}`,
-          text: `[Recipient Email: ${payload.toEmail}]\n\n` + textBody,
-          html: `<p style="background: #fef3c7; color: #92400e; padding: 10px; border-radius: 8px;"><strong>Resend Sandbox Notice:</strong> Delivered to Chapter Admin. Participant email: <strong>${payload.toEmail}</strong></p>` + htmlBody,
-          attachments: attachments,
-        }),
+        body: JSON.stringify(bodyObj),
       });
 
-      if (fallbackRes.ok) {
-        const fbData = await fallbackRes.json();
-        await updateRegistrationCertificateStatus(payload.registrationId, true, payload.certificateId);
-        return {
-          success: true,
-          messageId: fbData.id,
-          details: `Certificate delivered to fossceprn@gmail.com (Resend Sandbox for ${payload.toEmail})`,
-        };
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        // Likely index.html rewrite or non-API response
+        return null;
       }
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data?.id) {
+        await updateRegistrationCertificateStatus(
+          payload.registrationId,
+          true,
+          payload.certificateId,
+          "sent",
+          null
+        );
+        return { success: true, messageId: data.id };
+      }
+
+      // Handle free tier sandbox domain restriction (403: only send to fossceprn@gmail.com)
+      if (
+        res.status === 403 ||
+        (data?.message &&
+          (data.message.includes("fossceprn@gmail.com") ||
+            data.message.includes("testing emails") ||
+            data.message.includes("domain")))
+      ) {
+        console.warn("Resend Sandbox Mode: Dispatching certificate copy to verified account fossceprn@gmail.com");
+        const fallbackObj = {
+          ...bodyObj,
+          to: ["fossceprn@gmail.com"],
+          subject: `[Participant Certificate: ${payload.attendeeName}] ${subject}`,
+        };
+        const fbRes = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(fallbackObj),
+        });
+        const fbContentType = fbRes.headers.get("content-type") || "";
+        if (fbContentType.includes("application/json")) {
+          const fbData = await fbRes.json().catch(() => ({}));
+          if (fbRes.ok && fbData?.id) {
+            await updateRegistrationCertificateStatus(
+              payload.registrationId,
+              true,
+              payload.certificateId,
+              "sent",
+              null
+            );
+            return {
+              success: true,
+              messageId: fbData.id,
+              details: `Delivered copy to fossceprn@gmail.com (Resend Sandbox mode for ${payload.toEmail})`,
+            };
+          }
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
     }
-  } catch (proxyErr) {
-    console.info("Vite proxy dispatch skipped, trying Edge Function:", proxyErr);
+  };
+
+  // Dispatch Strategy:
+  // First attempt with 'certificate-delivery' template:
+  // Try /api/send-email (Vercel) -> /api/resend/emails (Vite)
+  let result = await trySendToEndpoint("/api/send-email", templatePayload);
+  if (!result) {
+    result = await trySendToEndpoint("/api/resend/emails", templatePayload);
   }
 
-  // Channel 2: Supabase Edge Function
+  // If template-based dispatch did not succeed, fallback to standard HTML/text dispatch:
+  if (!result) {
+    result = await trySendToEndpoint("/api/send-email", standardPayload);
+  }
+  if (!result) {
+    result = await trySendToEndpoint("/api/resend/emails", standardPayload);
+  }
+
+  if (result && result.success) {
+    return result;
+  }
+
+  // Channel 3: Supabase Edge Function
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase.functions.invoke("send-ticket-email", {
@@ -664,14 +734,29 @@ export async function sendCertificateEmail(
           venue: "College of Engineering Perumon",
           pdfBase64: payload.pdfBase64,
           subject: subject,
-          attachmentFilename: payload.filename || `Certificate-${payload.certificateId}.pdf`,
+          attachmentFilename: certFilename,
+          template: {
+            id: "certificate-delivery",
+            variables: {
+              PARTICIPANT_NAME: payload.attendeeName,
+              EVENT_TITLE: payload.eventTitle,
+              CERTIFICATE_ID: payload.certificateId,
+              VERIFY_URL: verifyUrl,
+            },
+          },
           textBody,
           htmlBody,
         },
       });
 
       if (!error && data && data.success) {
-        await updateRegistrationCertificateStatus(payload.registrationId, true, payload.certificateId);
+        await updateRegistrationCertificateStatus(
+          payload.registrationId,
+          true,
+          payload.certificateId,
+          "sent",
+          null
+        );
         return { success: true, messageId: data.messageId };
       }
     } catch (err: any) {
@@ -679,9 +764,19 @@ export async function sendCertificateEmail(
     }
   }
 
-  // Fallback to record in DB
-  await updateRegistrationCertificateStatus(payload.registrationId, true, payload.certificateId);
-  return { success: true, messageId: "queued-dev-cert-id" };
+  // If completely unable to send, update status to failed and report error!
+  const failReason = "Could not deliver email via Resend (verify API key and network connection).";
+  await updateRegistrationCertificateStatus(
+    payload.registrationId,
+    false,
+    payload.certificateId,
+    "failed",
+    failReason
+  );
+  return {
+    success: false,
+    error: failReason,
+  };
 }
 
 /**

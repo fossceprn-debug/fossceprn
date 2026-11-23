@@ -36,6 +36,8 @@ export interface EventRegistration {
   certificate_issued?: boolean;
   certificate_issued_at?: string | null;
   certificate_id?: string | null;
+  certificate_email_status?: "idle" | "pending" | "sent" | "failed" | string | null;
+  certificate_email_error?: string | null;
 }
 
 export interface Profile {

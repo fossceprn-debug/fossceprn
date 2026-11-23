@@ -88,7 +88,10 @@ export const EventRegistrationModal: React.FC<
   const autoDownloadedRef = useRef(false);
 
   const passTheme = getEventPassTheme(event);
-  const resolvedWhatsAppLink = event.whatsapp_group_link || extractEventWhatsAppLink(event);
+  const resolvedWhatsAppLink =
+    event.whatsapp_group_link ||
+    extractEventWhatsAppLink(event) ||
+    "https://chat.whatsapp.com";
 
   // Reset when modal opens
   useEffect(() => {
@@ -1065,6 +1068,19 @@ export const EventRegistrationModal: React.FC<
                   This pass is issued specifically to the registered participant.
                 </p>
 
+                {/* WhatsApp Group Quick Link in Pass */}
+                <div className="mt-3">
+                  <a
+                    href={resolvedWhatsAppLink || "https://chat.whatsapp.com"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold text-[11px] bg-[#25D366] hover:bg-[#20ba5a] shadow-sm transition-all"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 fill-current shrink-0" />
+                    <span>Join Official WhatsApp Group</span>
+                  </a>
+                </div>
+
               </div>
 
               {/* Bottom Theme Strip */}
@@ -1076,78 +1092,53 @@ export const EventRegistrationModal: React.FC<
 
             </div>
 
-            {/* WhatsApp Group Joining Option (If link configured for event) */}
-            {resolvedWhatsAppLink && (
-              <div className="max-w-[410px] mx-auto w-full">
+            {/* Action Buttons with Join WhatsApp Group button directly next to Download Ticket PDF */}
+
+            <div className="max-w-[410px] mx-auto space-y-2.5">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+                <Button
+                  disabled={downloadingPdf}
+                  onClick={handleDownloadPdfTicket}
+                  className="h-11 rounded-xl text-xs font-bold text-white gap-2 shadow-sm"
+                  style={{ backgroundColor: passTheme.primary }}
+                >
+                  {downloadingPdf ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  Download Ticket (PDF)
+                </Button>
+
                 <a
-                  href={resolvedWhatsAppLink}
+                  href={resolvedWhatsAppLink || "https://chat.whatsapp.com"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-white font-bold text-xs sm:text-sm shadow-md transition-all transform hover:scale-[1.02] active:scale-[0.98] bg-[#25D366] hover:bg-[#20ba5a]"
+                  className="h-11 rounded-xl text-xs font-bold text-white gap-2 flex items-center justify-center bg-[#25D366] hover:bg-[#20ba5a] shadow-sm transition-all"
                   title="Join Official Event WhatsApp Group"
                 >
-                  <MessageCircle className="w-4 h-4 fill-current" />
-                  <span>Join Event WhatsApp Group</span>
+                  <MessageCircle className="w-4 h-4 fill-current shrink-0" />
+                  <span>Join WhatsApp Group</span>
                 </a>
+
               </div>
-            )}
-
-            {/* Action Buttons */}
-
-            <div className="max-w-[410px] mx-auto space-y-3">
 
               <div className="grid grid-cols-2 gap-2">
 
                 <Button
                   variant="outline"
                   onClick={handlePrint}
-                  className="h-11 rounded-xl gap-2 text-xs"
+                  className="h-10 rounded-xl gap-2 text-xs"
                 >
                   <Printer className="w-4 h-4" />
                   Print Pass
                 </Button>
 
                 <Button
-                  variant="outline"
-                  disabled={downloadingPass}
-                  onClick={handleDownloadTicket}
-                  className="h-11 rounded-xl gap-2 text-xs"
-                >
-
-                  {downloadingPass ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4" />
-                  )}
-
-                  Pass Image
-
-                </Button>
-
-              </div>
-
-              <div className="grid grid-cols-[1fr_auto] gap-2">
-
-                <Button
-                  disabled={downloadingPdf}
-                  onClick={handleDownloadPdfTicket}
-                  className="h-11 rounded-xl text-xs font-bold text-white gap-2"
-                  style={{ backgroundColor: passTheme.primary }}
-                >
-
-                  {downloadingPdf ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4" />
-                  )}
-
-                  Download PDF Ticket
-
-                </Button>
-
-                <Button
                   onClick={onClose}
-                  className="h-11 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
+                  className="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
                 >
                   Done
                 </Button>

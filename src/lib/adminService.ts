@@ -1154,23 +1154,35 @@ export async function updateRegistrationEmailStatus(
 export async function updateRegistrationCertificateStatus(
   registrationId: string,
   issued: boolean,
-  certificateId?: string | null
+  certificateId?: string | null,
+  emailStatus: "sent" | "failed" | string = "sent",
+  emailError?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   const issuedAt = issued ? new Date().toISOString() : null;
 
   if (isSupabaseConfigured) {
     try {
+      const updatePayload: Record<string, any> = {
+        certificate_issued: issued,
+        certificate_issued_at: issuedAt,
+        certificate_id: certificateId || null,
+      };
+
       const { error } = await supabase
         .from("event_registrations")
         .update({
-          certificate_issued: issued,
-          certificate_issued_at: issuedAt,
-          certificate_id: certificateId || null,
+          ...updatePayload,
+          certificate_email_status: emailStatus,
+          certificate_email_error: emailError || null,
         })
         .eq("id", registrationId);
 
       if (error) {
-        console.warn("Failed to update certificate status in Supabase:", error.message);
+        // Fallback in case certificate_email_status column hasn't been migrated in DB yet
+        await supabase
+          .from("event_registrations")
+          .update(updatePayload)
+          .eq("id", registrationId);
       }
     } catch (err: any) {
       console.warn("Exception updating certificate status:", err);
@@ -1185,6 +1197,8 @@ export async function updateRegistrationCertificateStatus(
           certificate_issued: issued,
           certificate_issued_at: issuedAt,
           certificate_id: certificateId || null,
+          certificate_email_status: emailStatus,
+          certificate_email_error: emailError || null,
         }
       : r
   );

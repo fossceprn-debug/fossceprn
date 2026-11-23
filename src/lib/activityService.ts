@@ -12,127 +12,25 @@ function formatDateOffset(daysOffset: number): string {
   return `${year}-${month}-${day}`;
 }
 
-export const INITIAL_SEED_ACTIVITIES: ActivityItem[] = [
-  {
-    id: "act-001",
-    title: "FOSS CEPrn ExeCom & Faculty Monthly Review",
-    description:
-      "Monthly strategic alignment meeting between student executive coordinators and department faculty advisors to review ongoing activities, platform updates, and upcoming hackathon milestones.",
-    activity_date: formatDateOffset(0), // Today
-    deadline_date: formatDateOffset(0),
-    start_time: "03:30 PM",
-    end_time: "04:30 PM",
-    venue: "Department Conference Room / Google Meet",
-    category: "Meeting",
-    status: "published",
-    coordinators: ["Amal Dev A", "Arun V"],
-    volunteers: [
-      { name: "Abiya Daniel", task: "Minutes of Meeting & Agenda Circulation" },
-      { name: "Amal Dev A", task: "Presentation Slides & Screen Sharing" },
-    ],
-    created_by: "Administrator",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "act-002",
-    title: "Hands-on Git & GitHub for Open Source Contribution",
-    description:
-      "Interactive technical workshop covering Git fundamentals, branching, resolving merge conflicts, creating clean pull requests, and making your first open source contribution.",
-    activity_date: formatDateOffset(3),
-    deadline_date: formatDateOffset(2),
-    start_time: "10:00 AM",
-    end_time: "01:00 PM",
-    venue: "Computer Lab 2, CSE Block",
-    category: "Workshop",
-    status: "published",
-    coordinators: ["Arun V", "Amal Dev A"],
-    volunteers: [
-      { name: "Abiya Daniel", task: "Registration Desk & Attendee Check-in" },
-      { name: "Arun V", task: "Lab Systems Setup & Git Verification" },
-      { name: "Amal Dev A", task: "Hands-on PR Review & Mentor Support" },
-    ],
-    created_by: "FOSS CEPrn Technical Team",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "act-003",
-    title: "Open Source Hack Night & PR Review Sprint",
-    description:
-      "Community peer-coding session dedicated to resolving open issues on college FOSS projects, testing new modules, and reviewing pull requests together.",
-    activity_date: formatDateOffset(7),
-    deadline_date: formatDateOffset(5),
-    start_time: "04:30 PM",
-    end_time: "06:30 PM",
-    venue: "Seminar Hall 1",
-    category: "Coding Session",
-    status: "published",
-    coordinators: ["Amal Dev A", "Abiya Daniel"],
-    volunteers: [
-      { name: "Arun V", task: "Wi-Fi & Network Provisioning" },
-      { name: "Abiya Daniel", task: "Issue Board & Task Allocation" },
-      { name: "Amal Dev A", task: "Code Review & Mentorship" },
-    ],
-    created_by: "Amal Dev A",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "act-004",
-    title: "Technical Talk: Systems Programming with Rust",
-    description:
-      "Deep dive into the Rust programming language, ownership model, borrow checker, concurrency safety, and building high-performance CLI tools.",
-    activity_date: formatDateOffset(14),
-    deadline_date: formatDateOffset(12),
-    start_time: "02:00 PM",
-    end_time: "04:00 PM",
-    venue: "Main College Auditorium",
-    category: "Technical Talk",
-    status: "published",
-    coordinators: ["Arun V", "Amal Dev A"],
-    volunteers: [
-      { name: "Abiya Daniel", task: "Guest Speaker Hospitality & Stage Management" },
-      { name: "Arun V", task: "Projector, Audio & Live Q&A Mic Support" },
-    ],
-    created_by: "Arun V (Tech Lead)",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "act-005",
-    title: "CEPrn Campus Winter Hackathon 2026",
-    description:
-      "Flagship 24-hour campus hackathon fostering open-source solutions for campus automation, sustainability, and student tools. Mentorship and food provided.",
-    activity_date: formatDateOffset(24),
-    deadline_date: formatDateOffset(20),
-    start_time: "09:00 AM",
-    end_time: "05:00 PM",
-    venue: "Central Computing Facility (CCF)",
-    category: "Hackathon",
-    status: "published",
-    coordinators: ["Amal Dev A", "Arun V"],
-    volunteers: [
-      { name: "Abiya Daniel", task: "Registration & Participant ID Badges" },
-      { name: "Arun V", task: "Mentor Coordination & Evaluation Desk" },
-      { name: "Amal Dev A", task: "Server Infrastructure & Repo Setup" },
-    ],
-    created_by: "FOSS CEPrn ExeCom",
-    created_at: new Date().toISOString(),
-  },
-];
+export const INITIAL_SEED_ACTIVITIES: ActivityItem[] = [];
 
 function getStoredActivities(): ActivityItem[] {
   try {
     const raw = localStorage.getItem(ACTIVITIES_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        // Purge any legacy false/mock seed activities
+        const realActivities = parsed.filter(
+          (a) => a && !["act-001", "act-002", "act-003", "act-004", "act-005"].includes(a.id)
+        );
+        return realActivities;
       }
     }
   } catch (e) {
     console.warn("Could not read local activities storage", e);
   }
-  // Initialize with seed
-  saveStoredActivities(INITIAL_SEED_ACTIVITIES);
-  return INITIAL_SEED_ACTIVITIES;
+  return [];
 }
 
 function saveStoredActivities(activities: ActivityItem[]): void {

@@ -48,6 +48,20 @@ export interface GeneratedCertificate {
   pdfBase64: string;
 }
 
+/**
+ * Standard certificate filename formatting:
+ * PARTICIPANT NAME_ FOSS_CEPRN_CERTIFICATEDID
+ */
+export function formatCertificateFilename(attendeeName: string, certificateId: string): string {
+  const cleanName = (attendeeName || "PARTICIPANT")
+    .trim()
+    .replace(/[<>:"/\\|?*]/g, "")
+    .replace(/\s+/g, "_")
+    .toUpperCase();
+  const cleanId = (certificateId || "CERT").trim();
+  return `${cleanName}_FOSS_CEPRN_${cleanId}.pdf`;
+}
+
 // ============================================================================
 // PAGE SIZE
 // ============================================================================
@@ -154,6 +168,25 @@ function containSize(
   };
 }
 
+async function prepareCleanImageForPdf(src: string): Promise<string> {
+  if (typeof document === "undefined") return src;
+  try {
+    const img = await loadImage(src);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return src;
+    // Fill pure white background to prevent any black background transparency bug in jsPDF
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+    return canvas.toDataURL("image/jpeg", 0.95);
+  } catch {
+    return src;
+  }
+}
+
 async function addPdfImage(
   doc: jsPDF,
   src: string,
@@ -163,7 +196,8 @@ async function addPdfImage(
   height: number
 ) {
   try {
-    const img = await loadImage(src);
+    const cleanSrc = await prepareCleanImageForPdf(src);
+    const img = await loadImage(cleanSrc);
 
     const size = containSize(
       img.naturalWidth || img.width,
@@ -175,15 +209,9 @@ async function addPdfImage(
     const finalX = x + (width - size.width) / 2;
     const finalY = y + (height - size.height) / 2;
 
-    const format =
-      src.startsWith("data:image/jpeg") ||
-        src.startsWith("data:image/jpg")
-        ? "JPEG"
-        : "PNG";
-
     doc.addImage(
-      src,
-      format,
+      cleanSrc,
+      "JPEG",
       finalX,
       finalY,
       size.width,
@@ -1830,11 +1858,7 @@ export async function generateAttendeeCertificate(
   // OUTPUT
   // ==========================================================================
 
-  const cleanName = attendee.full_name
-    .replace(/[^a-zA-Z0-9_-]/g, "_");
-
-  const filename =
-    `Certificate-${certId}-${cleanName}.pdf`;
+  const filename = formatCertificateFilename(attendee.full_name, certId);
 
   const pdfBlob = doc.output("blob");
 

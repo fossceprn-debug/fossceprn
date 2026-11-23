@@ -103,19 +103,46 @@ export type ExecomDashboardTab =
 
 function playBeepSound(type: "success" | "error" = "success") {
   try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      if (type === "success") {
+        navigator.vibrate([80, 40, 100]);
+      } else {
+        navigator.vibrate([150, 50, 150]);
+      }
+    }
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(type === "success" ? 880 : 330, ctx.currentTime);
-    gain.gain.setValueAtTime(0.25, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.25);
+    if (ctx.state === "suspended") {
+      ctx.resume();
+    }
+    const now = ctx.currentTime;
+    if (type === "success") {
+      // Pleasant clear two-tone approval chime (880Hz -> 1320Hz)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(880, now);
+      osc1.frequency.setValueAtTime(1320, now + 0.1);
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+    } else {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.setValueAtTime(220, now + 0.12);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    }
   } catch {}
 }
 
@@ -323,6 +350,11 @@ export const ExecomDashboard: React.FC = () => {
   const isProcessingScanRef = useRef(false);
   const lastScannedCodeRef = useRef("");
   const lastScanTimeRef = useRef(0);
+  const [markedAttendanceOverlay, setMarkedAttendanceOverlay] = useState<{
+    name: string;
+    ticketCode: string;
+  } | null>(null);
+  const markedAttendanceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --------------------------------------------------------------------------
   // Dedicated Participants Tab State
@@ -767,6 +799,17 @@ export const ExecomDashboard: React.FC = () => {
             Date.now() - new Date(reg.checked_in_at).getTime() > 12000);
 
         playBeepSound("success");
+        if (markedAttendanceTimerRef.current) {
+          clearTimeout(markedAttendanceTimerRef.current);
+        }
+        setMarkedAttendanceOverlay({
+          name: reg.full_name || "Participant",
+          ticketCode: reg.ticket_code || code,
+        });
+        markedAttendanceTimerRef.current = setTimeout(() => {
+          setMarkedAttendanceOverlay(null);
+        }, 2000);
+
         setScanResult({
           type: wasAlready ? "warning" : "success",
           title: wasAlready ? "Already Checked In" : "Check-in Successful!",
@@ -1578,43 +1621,45 @@ export const ExecomDashboard: React.FC = () => {
       {/* ------------------------------------------------------------------ */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden w-full">
         <main className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-6 overflow-x-hidden">
-        {/* Welcome Callout Banner */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Welcome back, {user?.full_name || "ExeCom Member"}
-              </span>
-              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-[10px]">
-                ExeCom Member Session
-              </Badge>
+        {/* Welcome Callout Banner (Shown ONLY on Events & Workshops Tab) */}
+        {activeTab === "events" && (
+          <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  Welcome back, {user?.full_name || "ExeCom Member"}
+                </span>
+                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-[10px]">
+                  ExeCom Member Session
+                </Badge>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight">
+                ExeCom Member Dashboard
+              </h1>
+              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                Create and manage chapter workshops, check in attendees with live QR scanning, track student attendance, and coordinate with ExeCom team members.
+              </p>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-              ExeCom Member Dashboard
-            </h1>
-            <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-              Create and manage chapter workshops, check in attendees with live QR scanning, track student attendance, and coordinate with ExeCom team members.
-            </p>
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              onClick={() => setActiveTab("scanner")}
-              className="bg-emerald-400/20 hover:bg-emerald-400/30 text-emerald-300 border border-emerald-400/40 font-bold text-xs gap-1.5 shadow-xs h-9 px-3.5"
-            >
-              <QrCode className="w-4 h-4 text-emerald-400" />
-              <span>Scan QR Pass</span>
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                onClick={() => setActiveTab("scanner")}
+                className="bg-emerald-400/20 hover:bg-emerald-400/30 text-emerald-300 border border-emerald-400/40 font-bold text-xs gap-1.5 shadow-xs h-9 px-3.5"
+              >
+                <QrCode className="w-4 h-4 text-emerald-400" />
+                <span>Scan QR Pass</span>
+              </Button>
 
-            <Button
-              onClick={handleOpenCreateEvent}
-              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs gap-1.5 shadow-md shadow-emerald-950/20"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create New Event</span>
-            </Button>
+              <Button
+                onClick={handleOpenCreateEvent}
+                className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs gap-1.5 shadow-md shadow-emerald-950/20"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create New Event</span>
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ================================================================ */}
         {/* TAB 1: EVENTS MANAGEMENT */}
@@ -2114,6 +2159,23 @@ export const ExecomDashboard: React.FC = () => {
               </div>
             </Card>
 
+            {/* Top 2s Notification Banner for Marked Attendance on Mobile & Desktop */}
+            {markedAttendanceOverlay && (
+              <div className="fixed top-20 inset-x-4 sm:inset-x-auto sm:right-6 sm:w-96 z-50 pointer-events-none animate-bounce">
+                <div className="bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-emerald-400/50">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black uppercase tracking-wider">marked Attendance</p>
+                    <p className="text-xs text-emerald-100 font-bold truncate">
+                      {markedAttendanceOverlay.name} • {markedAttendanceOverlay.ticketCode}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column: Live Camera Scanner */}
               <Card className="lg:col-span-6 p-5 border border-slate-200 bg-white rounded-2xl shadow-xs space-y-4">
@@ -2128,8 +2190,27 @@ export const ExecomDashboard: React.FC = () => {
                 </div>
 
                 {/* Viewfinder Area */}
-                <div className="relative w-full aspect-square max-w-[340px] mx-auto rounded-2xl overflow-hidden bg-slate-950 flex flex-col items-center justify-center border border-slate-300">
+                <div className="relative w-full aspect-square max-w-[340px] mx-auto rounded-2xl overflow-hidden bg-slate-950 flex flex-col items-center justify-center border-2 border-slate-300 shadow-inner">
                   <div id="dashboard-camera-qr-reader" className="w-full h-full" />
+                  
+                  {/* Marked Attendance 2-Second Visual Confirmation Overlay */}
+                  {markedAttendanceOverlay && (
+                    <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-xs z-30 flex flex-col items-center justify-center p-5 text-center animate-fade-in">
+                      <div className="w-16 h-16 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/50 mb-3 animate-scale-in">
+                        <CheckCircle2 className="w-9 h-9" />
+                      </div>
+                      <span className="text-xl font-black text-white tracking-wide uppercase">
+                        marked Attendance
+                      </span>
+                      <p className="text-xs text-emerald-200 font-bold mt-1.5 max-w-[240px] truncate">
+                        {markedAttendanceOverlay.name}
+                      </p>
+                      <p className="text-[11px] text-emerald-300 font-mono mt-0.5">
+                        {markedAttendanceOverlay.ticketCode}
+                      </p>
+                    </div>
+                  )}
+
                   {!isScanningCamera && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-white bg-slate-900/90 space-y-3">
                       <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
