@@ -1621,41 +1621,32 @@ export const ExecomDashboard: React.FC = () => {
       {/* ------------------------------------------------------------------ */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden w-full">
         <main className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-6 overflow-x-hidden">
-        {/* Welcome Callout Banner (Shown ONLY on Events & Workshops Tab) */}
+        {/* Events Tab Header (Shown ONLY on Events & Workshops Tab) */}
         {activeTab === "events" && (
-          <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                  Welcome back, {user?.full_name || "ExeCom Member"}
-                </span>
-                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-[10px]">
-                  ExeCom Member Session
-                </Badge>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-                ExeCom Member Dashboard
-              </h1>
-              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                Create and manage chapter workshops, check in attendees with live QR scanning, track student attendance, and coordinate with ExeCom team members.
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
+            <div>
+              <h1 className="text-lg font-bold text-slate-900 tracking-tight">Events &amp; Workshops</h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Hi {user?.full_name?.split(" ")[0] || "there"} — manage events, registrations &amp; attendance below.
               </p>
             </div>
-
             <div className="flex items-center gap-2 shrink-0">
               <Button
                 onClick={() => setActiveTab("scanner")}
-                className="bg-emerald-400/20 hover:bg-emerald-400/30 text-emerald-300 border border-emerald-400/40 font-bold text-xs gap-1.5 shadow-xs h-9 px-3.5"
+                variant="outline"
+                size="sm"
+                className="text-xs font-semibold gap-1.5 h-8 border-slate-300 text-slate-700 hover:text-emerald-700 hover:border-emerald-300"
               >
-                <QrCode className="w-4 h-4 text-emerald-400" />
-                <span>Scan QR Pass</span>
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Scan QR</span>
               </Button>
-
               <Button
                 onClick={handleOpenCreateEvent}
-                className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs gap-1.5 shadow-md shadow-emerald-950/20"
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5 h-8"
               >
-                <Plus className="w-4 h-4" />
-                <span>Create New Event</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Event</span>
               </Button>
             </div>
           </div>

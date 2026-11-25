@@ -595,18 +595,13 @@ export async function sendCertificateEmail(
     "";
 
   // 1. Prepare Resend Hosted Template payload ('certificate-delivery')
+  // NOTE: The template has NO variables defined in Resend dashboard — do not pass variables.
   const templatePayload = {
     from: "FOSS CEPrn <onboarding@resend.dev>",
     to: [payload.toEmail],
     subject: subject,
     template: {
       id: "certificate-delivery",
-      variables: {
-        PARTICIPANT_NAME: payload.attendeeName,
-        EVENT_TITLE: payload.eventTitle,
-        CERTIFICATE_ID: payload.certificateId,
-        VERIFY_URL: verifyUrl,
-      },
     },
     attachments: attachments,
   };
@@ -737,12 +732,7 @@ export async function sendCertificateEmail(
           attachmentFilename: certFilename,
           template: {
             id: "certificate-delivery",
-            variables: {
-              PARTICIPANT_NAME: payload.attendeeName,
-              EVENT_TITLE: payload.eventTitle,
-              CERTIFICATE_ID: payload.certificateId,
-              VERIFY_URL: verifyUrl,
-            },
+            // No variables — certificate-delivery template has none defined in Resend
           },
           textBody,
           htmlBody,

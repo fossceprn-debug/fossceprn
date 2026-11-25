@@ -150,8 +150,8 @@ export const AdminOverview: React.FC = () => {
 
   return (
     <AdminLayout
-      title="Dashboard Overview"
-      subtitle="Real-time metrics, content status, and administrative activities from Supabase."
+      title="Dashboard"
+      subtitle="Stats, activity logs, and quick links."
       actions={
         <Button
           variant="outline"
@@ -166,29 +166,18 @@ export const AdminOverview: React.FC = () => {
       }
     >
       {/* ExeCom Main Operations Banner */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-950 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-emerald-500/30 shadow-xs">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 flex items-center justify-center shrink-0">
-            <LayoutDashboard className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm font-bold text-white">ExeCom Chapter Main Dashboard</h3>
-              <span className="text-[10px] font-semibold bg-emerald-500/25 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/30">
-                Live QR Pass Scanner
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 mt-0.5 line-clamp-1">
-              Access the main operational dashboard to verify attendee QR ticket passes, manage registrations, and coordinate workshops.
-            </p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+        <div>
+          <h2 className="text-base font-bold text-slate-900">Chapter Overview</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Live data pulled from Supabase — click any card to manage.</p>
         </div>
         <Button
           asChild
-          className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs gap-1.5 shrink-0 h-9 px-4 shadow-sm shadow-emerald-950/20"
+          size="sm"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5 h-8 shrink-0"
         >
           <a href="https://foss.ieprn.co.in/execom/dashboard">
-            <span>Open Main Dashboard</span>
+            <span>ExeCom Dashboard</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </Button>

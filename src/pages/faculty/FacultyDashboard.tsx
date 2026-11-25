@@ -600,34 +600,19 @@ export const FacultyDashboard: React.FC = () => {
           {/* ================================================================ */}
           {activeTab === "overview" && (
             <div className="space-y-6">
-              {/* Welcome Callout Banner */}
-              <div className="p-6 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white rounded-3xl shadow-sm relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="space-y-2 max-w-2xl relative z-10">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-white/10 text-indigo-200 border border-white/10">
-                    <GraduationCap className="w-3.5 h-3.5 text-indigo-300" />
-                    <span>Faculty Coordinator & Staff Advisor View</span>
-                  </div>
-                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-                    Welcome, {user?.full_name || "Faculty Coordinator"}
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    Official faculty advisory oversight across student open-source initiatives,
-                    registered campus members, published workshops, and executive committee leadership.
-                    Editing and administration controls are restricted to chapter admins.
+              {/* Overview Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+                <div>
+                  <h1 className="text-lg font-bold text-slate-900 tracking-tight">
+                    Welcome, {user?.full_name?.split(" ")[0] || "Faculty"}
+                  </h1>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Faculty advisory view — read-only. Admin controls are restricted to chapter admins.
                   </p>
                 </div>
-
-                <div className="shrink-0 flex items-center gap-2 p-3 bg-white/10 rounded-2xl border border-white/10 text-xs text-indigo-100">
-                  <Clock className="w-4 h-4 text-emerald-400" />
-                  <span>
-                    {new Date().toLocaleDateString("en-US", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
-                </div>
+                <span className="text-xs text-slate-400 font-medium shrink-0">
+                  {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+                </span>
               </div>
 
               {/* 5 KPI Metric Cards */}
