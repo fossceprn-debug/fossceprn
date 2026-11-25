@@ -574,13 +574,7 @@ export async function sendCertificateEmail(
   const certFilename = formatCertificateFilename(payload.attendeeName, payload.certificateId);
   const textBody = buildCertificateEmailText(payload);
   const htmlBody = buildCertificateEmailHtml(payload);
-  const subject = `Official Certificate: ${payload.eventTitle} - ${payload.attendeeName} [ID: ${payload.certificateId}]`;
-
-  const websiteUrl =
-    typeof window !== "undefined" && window.location.origin
-      ? window.location.origin
-      : "https://fossceprn.org";
-  const verifyUrl = `${websiteUrl}/verify?id=${payload.certificateId}`;
+  const subject = `Your FOSS CEPrn Certificate – ${payload.attendeeName} [${payload.certificateId}]`;
 
   const attachments: Array<{ filename: string; content: string }> = [
     {
@@ -589,51 +583,27 @@ export async function sendCertificateEmail(
     },
   ];
 
-  const resendApiKey =
-    (import.meta.env as any).VITE_RESEND_API_KEY ||
-    (import.meta.env as any).RESEND_API_KEY ||
-    "";
-
-  // 1. Prepare Resend Hosted Template payload ('certificate-delivery')
-  // NOTE: The template has NO variables defined in Resend dashboard — do not pass variables.
-  const templatePayload = {
+  // ── Resend-compatible email payload (HTML + attachment, no template endpoint)
+  const emailPayload = {
     from: "FOSS CEPrn <onboarding@resend.dev>",
     to: [payload.toEmail],
     subject: subject,
-    template: {
-      id: "certificate-delivery",
-    },
-    attachments: attachments,
-  };
-
-  // 2. Prepare Standard HTML/Text payload
-  const standardPayload = {
-    from: "FOSS CEPrn <onboarding@resend.dev>",
-    to: [payload.toEmail],
-    subject: subject,
-    text: textBody,
     html: htmlBody,
-    tags: [{ name: "template", value: "certificate-delivery" }],
+    text: textBody,
     attachments: attachments,
   };
 
-  // Helper to attempt dispatch via a given endpoint
-  const trySendToEndpoint = async (url: string, bodyObj: any): Promise<EmailSendResult | null> => {
+  // ── Helper: POST to a given endpoint and return success/null
+  const trySendToEndpoint = async (url: string): Promise<EmailSendResult | null> => {
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(bodyObj),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(emailPayload),
       });
 
       const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        // Likely index.html rewrite or non-API response
-        return null;
-      }
+      if (!contentType.includes("application/json")) return null;
 
       const data = await res.json().catch(() => ({}));
 
@@ -645,71 +615,24 @@ export async function sendCertificateEmail(
           "sent",
           null
         );
-        return { success: true, messageId: data.id };
+        return { success: true, messageId: data.id, details: data.details };
       }
 
-      // Handle free tier sandbox domain restriction (403: only send to fossceprn@gmail.com)
-      if (
-        res.status === 403 ||
-        (data?.message &&
-          (data.message.includes("fossceprn@gmail.com") ||
-            data.message.includes("testing emails") ||
-            data.message.includes("domain")))
-      ) {
-        console.warn("Resend Sandbox Mode: Dispatching certificate copy to verified account fossceprn@gmail.com");
-        const fallbackObj = {
-          ...bodyObj,
-          to: ["fossceprn@gmail.com"],
-          subject: `[Participant Certificate: ${payload.attendeeName}] ${subject}`,
-        };
-        const fbRes = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${resendApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(fallbackObj),
-        });
-        const fbContentType = fbRes.headers.get("content-type") || "";
-        if (fbContentType.includes("application/json")) {
-          const fbData = await fbRes.json().catch(() => ({}));
-          if (fbRes.ok && fbData?.id) {
-            await updateRegistrationCertificateStatus(
-              payload.registrationId,
-              true,
-              payload.certificateId,
-              "sent",
-              null
-            );
-            return {
-              success: true,
-              messageId: fbData.id,
-              details: `Delivered copy to fossceprn@gmail.com (Resend Sandbox mode for ${payload.toEmail})`,
-            };
-          }
-        }
-      }
-
+      // Sandbox fallback already handled inside /api/send-email Vercel function
+      console.warn(`Certificate email attempt to ${url} failed:`, data);
       return null;
-    } catch {
+    } catch (err) {
+      console.warn(`Certificate email fetch error at ${url}:`, err);
       return null;
     }
   };
 
-  // Dispatch Strategy:
-  // First attempt with 'certificate-delivery' template:
-  // Try /api/send-email (Vercel) -> /api/resend/emails (Vite)
-  let result = await trySendToEndpoint("/api/send-email", templatePayload);
-  if (!result) {
-    result = await trySendToEndpoint("/api/resend/emails", templatePayload);
-  }
+  // ── Channel 1: Vercel serverless function /api/send-email (production-safe)
+  let result = await trySendToEndpoint("/api/send-email");
 
-  // If template-based dispatch did not succeed, fallback to standard HTML/text dispatch:
+  // ── Channel 2: Vite dev-proxy /api/resend/emails (local dev only)
   if (!result) {
-    result = await trySendToEndpoint("/api/send-email", standardPayload);
-  }
-  if (!result) {
-    result = await trySendToEndpoint("/api/resend/emails", standardPayload);
+    result = await trySendToEndpoint("/api/resend/emails");
   }
 
   if (result && result.success) {

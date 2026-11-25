@@ -3,20 +3,15 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 /**
  * Vercel Serverless Function: /api/send-email
  * Proxies email dispatches to Resend securely using server-side RESEND_API_KEY.
+ * The API key never touches the browser bundle.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS configuration
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed. Use POST." });
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
   const resendApiKey =
     process.env.RESEND_API_KEY ||
@@ -31,7 +26,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const payload = req.body;
-    let resendRes = await fetch("https://api.resend.com/emails", {
+
+    // Strip any Authorization header from client — always use server-side key
+    const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${resendApiKey}`,
@@ -40,23 +37,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify(payload),
     });
 
-    let resendData = await resendRes.json();
+    let resendData = await resendRes.json().catch(() => ({}));
 
-    // Handle free tier sandbox domain restriction (403: only delivers to fossceprn@gmail.com)
-    if (
-      !resendRes.ok &&
-      resendRes.status === 403 &&
-      (resendData.message?.includes("testing emails") ||
-        resendData.message?.includes("fossceprn@gmail.com") ||
-        resendData.message?.includes("domain"))
-    ) {
-      console.warn("Resend Sandbox Mode: Dispatching to verified account fossceprn@gmail.com");
+    if (resendRes.ok && resendData?.id) {
+      return res.status(200).json(resendData);
+    }
+
+    // Handle Resend free-tier sandbox restriction:
+    // On the free plan, you can only send to your own verified email.
+    // Redirect to fossceprn@gmail.com with participant info in subject.
+    const isSandboxError =
+      resendRes.status === 403 ||
+      (resendData?.message &&
+        (String(resendData.message).includes("testing emails") ||
+          String(resendData.message).includes("fossceprn@gmail.com") ||
+          String(resendData.message).includes("only send") ||
+          String(resendData.message).includes("domain") ||
+          String(resendData.message).includes("verified")));
+
+    if (isSandboxError) {
+      console.warn("Resend sandbox restriction — redirecting to fossceprn@gmail.com");
+      const originalTo = Array.isArray(payload.to) ? payload.to.join(", ") : payload.to || "unknown";
       const fallbackPayload = {
         ...payload,
         to: ["fossceprn@gmail.com"],
-        subject: `[Participant: ${(payload.to || []).join(", ")}] ${payload.subject}`,
+        subject: `[Certificate for: ${originalTo}] ${payload.subject || "FOSS CEPrn Certificate"}`,
       };
-      resendRes = await fetch("https://api.resend.com/emails", {
+
+      const fbRes = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${resendApiKey}`,
@@ -64,18 +72,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
         body: JSON.stringify(fallbackPayload),
       });
-      resendData = await resendRes.json();
-      if (resendRes.ok) {
+
+      const fbData = await fbRes.json().catch(() => ({}));
+
+      if (fbRes.ok && fbData?.id) {
         return res.status(200).json({
-          ...resendData,
-          details: `Delivered copy to fossceprn@gmail.com (Resend Sandbox mode for ${(payload.to || []).join(", ")})`,
+          ...fbData,
+          details: `Sandbox mode: certificate delivered to fossceprn@gmail.com on behalf of ${originalTo}`,
         });
       }
+
+      return res.status(fbRes.status).json({
+        ...fbData,
+        error: `Sandbox fallback also failed: ${fbData?.message || "unknown error"}`,
+      });
     }
 
+    // Any other error — return Resend's response as-is
     return res.status(resendRes.status).json(resendData);
   } catch (err: any) {
-    console.error("Vercel send-email function error:", err);
-    return res.status(500).json({ error: err.message || "Failed to process email dispatch" });
+    console.error("Vercel send-email error:", err);
+    return res.status(500).json({ error: err?.message || "Internal server error" });
   }
 }
